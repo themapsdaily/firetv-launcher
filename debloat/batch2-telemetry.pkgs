@@ -1,0 +1,12 @@
+com.amazon.tv.fw.metrics
+com.amazon.wirelessmetrics.service
+com.amazon.perfc
+com.amazon.perfcollection
+com.amazon.dp.logger
+com.amazon.logan
+com.amazon.neo.minerva.logcat
+com.amazon.ceviche
+com.amazon.connectivitydiag
+com.amazon.tigris
+com.amazon.spiderpork
+com.amazon.tv.developer.dataservice

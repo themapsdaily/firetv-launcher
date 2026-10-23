@@ -1,0 +1,16 @@
+.env
+backup/
+debloat/log.tsv
+**/build/
+**/.gradle/
+**/local.properties
+.vscode/
+
+# Other people's projects, cloned for reference: see README for links.
+cleanyourtv/
+dumbtv/
+reference/
+
+# Personal media: race footage and the owner's avatar.
+home/art/
+home/app/src/main/assets/avatar.jpg

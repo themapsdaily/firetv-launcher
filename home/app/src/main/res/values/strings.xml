@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Home</string>
+    <string name="guard_label">Home button</string>
+    <string name="dream_label">Clock and photos</string>
+    <string name="watcher_label">Continue watching</string>
+    <string name="guard_description">Opens Home instead of Amazon\'s home screen when you press the Home button. Reads nothing on screen.</string>
+</resources>

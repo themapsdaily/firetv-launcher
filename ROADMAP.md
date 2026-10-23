@@ -47,6 +47,7 @@ Open items for the custom Fire TV UI (`home/`). Status key: **Open** (not starte
 
 **Tasks**
 - [ ] **Spike:** find out who controls volume. Check whether the stick's volume changes the monitor's number, or whether the stick has its own 0-15 scale (`adb shell dumpsys audio`).
+  - 2026-10-23: the stick has its own 0-15 media scale per output. HDMI is at 15 (max), and audio was routed to Bluetooth (7/15) at the time of the check. HDMI-CEC is on, but `hdmi_control_volume_control_enabled` is unset. **Zero-code test:** set the monitor to 12 and lower the stick's HDMI media volume to 13 or 14. That gives levels between the monitor's 11 and 12.
 - [ ] **Spike:** try an audio effect (loudness enhancer or gain) that lowers or raises the stick's output by a fraction of a step. Check it works across apps and on Netflix and Prime, which may bypass it.
 - [ ] Choose the design: fix the monitor at 11 and add a software "11.5" gain, or fix it at 12 and add attenuation.
 - [ ] Build the control: an on-screen slider in Home, mapped to the remote's volume buttons if Fire OS allows intercepting them.

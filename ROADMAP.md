@@ -217,7 +217,36 @@ Making it work on a Fire TV Stick 3rd gen (Fire OS 7, Android 9):
 - [ ] Add the Games column that appears only during a Games.
 - [ ] Add a setting to choose which sports and teams appear, and their order.
 
-## 8. Other ideas to rank later
+## 8. Known gaps
+
+Smaller items, roughly in priority order.
+
+### Performance (the 1 GB stick lags)
+
+- [ ] **Shrink the launcher's memory.** It uses about 105 MB PSS, half of that graphics. Decode backdrops at the screen's real size, keep at most the current and next slide in memory, and drop logos you can't see. Aim for under 70 MB.
+- [ ] **React to `onTrimMemory`.** On `TRIM_MEMORY_RUNNING_LOW` or worse, release the gallery's bitmaps and stop the shelf clip, and reload them when focus returns.
+- [ ] **Lighter animations on low memory.** Turn off dock magnification and the screensaver's depth effect when `ActivityManager.isLowRamDevice()` is true or available RAM is under 250 MB.
+- [ ] **Idle Spotify keeps about 130 MB.** Its foreground service survives `killBackgroundProcesses`. Add `install.sh --tidy`, which force-stops non-playing media apps over ADB.
+- [ ] **`com.amazon.tv.livetv` idles at about 50 MB.** Check whether HDMI/input needs it. If not, add it to a debloat batch 9.
+
+### Features
+
+- [ ] **Open shelf items.** Selecting a slide should open it in its app: Spotify URIs, and Netflix, Prime or JioHotstar title deep links where TMDB has an ID.
+- [ ] **Refresh the Spotify shelf automatically.** `Taste.MUSIC` is a fixed list today. Add a small script that regenerates it from the Spotify Web API (top items, short and medium term) before `install.sh`.
+- [ ] **On-TV settings.** Set name, city and hidden apps from a settings panel instead of `am start` extras.
+- [ ] **Test the Amazon Music button.** The remote's Amazon Music button should open Spotify through Guard, but nobody has pressed it on a real remote yet.
+- [ ] **More taste.** Extend `Taste.java` as more shows come up. Maybe let the watch history from section 1 feed it.
+
+### Project
+
+- [ ] **Release signing.** Release builds use the debug key. Add a real keystore, gitignored and passed through the environment.
+- [ ] **CI.** A GitHub Actions workflow that builds the APK on push and attaches it to tagged releases.
+- [ ] **Fix the deprecation warning** in `Home.java` (`-Xlint:deprecation`).
+- [ ] **Standalone debloat.** `debloat/fire.py` needs a cleanyourtv clone. Vendor its ADB client (with its license) or pin a commit.
+- [ ] **Screenshots in the README.** Show the dock, the Spotify shelf and the screensaver.
+- [ ] **Switch ADB off after a deploy.** Add `install.sh --adb-off`, which turns wireless debugging off when you're done.
+
+## 9. Other ideas to rank later
 
 - [ ] Per-profile home screen (different shelves for each person).
 - [ ] Sports shelf: live and upcoming F1 and cricket fixtures, beyond the FanCode artwork.

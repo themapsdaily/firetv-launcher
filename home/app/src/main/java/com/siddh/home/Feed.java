@@ -276,27 +276,29 @@ final class Feed {
 
     /**
      * Where the photo pool comes from: Wikimedia Commons searches over its Featured Pictures
-     * (curated, freely licensed, no text), with how many pictures each gives per refresh. Built
-     * around what the owner likes: cities at night, roads, hiking country, clean rivers, misty
-     * mountains, Iceland, New Zealand, Germany, tropical seas, architecture, some wildlife.
+     * (curated, freely licensed, no text), with how many pictures each gives per refresh. Tuned
+     * from the owner's picks over 60 candidates (2026-10-23): loved were towns and cities at night
+     * or blue hour (warm lamps under a deep blue sky), a village road, a river gorge, a cliff coast
+     * in evening light; rejected were flat daylight blues (lakes, beaches, reefs), aurora and neon
+     * glare, misty or snowy whites, wildlife, and wide panoramas. So night towns lead, and lakes,
+     * beaches, fog and birds are gone; Iceland and New Zealand stay at one each for variety.
      */
     private static final Object[][] POOL_SOURCES = {
-            {"incategory:\"Featured_pictures_of_cityscapes\" night", 3},
-            {"incategory:\"Featured_pictures_of_roads\"", 1},
-            {"incategory:\"Featured_pictures_of_mountains\"", 2},
-            {"incategory:\"Featured_pictures_of_landscapes\" fog OR mist OR haze", 1},
+            {"incategory:\"Featured_pictures_of_cityscapes\" night", 4},
+            {"incategory:\"Featured_pictures_of_cityscapes\" \"blue hour\" OR dusk OR twilight", 3},
+            {"deepcat:\"Featured pictures of Germany\" \"blue hour\" OR night OR evening", 2},
+            {"incategory:\"Featured_pictures_of_roads\"", 2},
             {"incategory:\"Featured_pictures_of_watercourses\"", 2},
-            {"incategory:\"Featured_pictures_of_lakes\"", 1},
+            {"incategory:\"Featured_pictures_of_mountains\"", 1},
             {"incategory:\"Featured_pictures_of_waterfalls\"", 1},
-            {"deepcat:\"Featured pictures of Iceland\"", 2},
-            {"deepcat:\"Featured pictures of New Zealand\"", 2},
-            {"deepcat:\"Featured pictures of Germany\"", 1},
-            {"incategory:\"Featured_pictures_of_beaches\"", 1},
+            {"deepcat:\"Featured pictures of Iceland\"", 1},
+            {"deepcat:\"Featured pictures of New Zealand\"", 1},
             {"incategory:\"Featured_pictures_of_coasts\"", 1},
             {"incategory:\"Featured_pictures_of_architecture\"", 1},
             {"deepcat:\"Featured pictures of Felidae\"", 1},
-            {"incategory:\"Featured_pictures_of_birds_in_flight\"", 1},
     };
+    /** How many of the owner's loved pictures ({@link Taste#PHOTOS_LOVED}) join each refresh. */
+    private static final int LOVED_PER_REFRESH = 3;
     /** Files never wanted in the pool: insects, and old (pre-1960) photographs. */
     private static final java.util.regex.Pattern UNWANTED = java.util.regex.Pattern.compile(
             "(?i)insect|\\bbees?\\b|bumblebee|butterfl|\\bmoths?\\b|dragonfl|damselfl|beetle|\\bwasps?\\b|hornet|"
@@ -305,9 +307,9 @@ final class Feed {
     private static final int POOL_MAX = 20;
 
     /**
-     * The shared photo pool: a few random wide pictures from each source above, at 1920 px (all a
-     * 1080p stick can show), in colour. Falls back to Bing's photos of the day if Commons is
-     * unreachable.
+     * The shared photo pool: a few random wide pictures from each source above, plus a few of the
+     * owner's loved ones, at 1920 px (all a 1080p stick can show), passing {@link #suits}. Falls
+     * back to Bing's photos of the day if Commons is unreachable.
      */
     private static boolean fetchPool(Context c) {
         File tmp = fresh(dir(c, POOL + ".new"));
@@ -337,12 +339,19 @@ final class Feed {
         }
         if (urls.size() < 4) urls.addAll(bing());
         Collections.shuffle(urls);
+        try {   // loved pictures go in at random places early enough to survive the POOL_MAX cut
+            for (String u : commonsFiles(Taste.PHOTOS_LOVED, LOVED_PER_REFRESH)) {
+                urls.add(random.nextInt(Math.min(urls.size(), POOL_MAX / 2) + 1), u);
+            }
+        } catch (IOException | JSONException e) {
+            Log.w(TAG, "commons loved: " + e.getMessage());
+        }
         int n = 0;
         for (String u : urls) {
             if (n >= POOL_MAX) break;
             File f = new File(tmp, n + ".jpg");
             if (!Net.download(u, f)) continue;
-            if (!colourful(f)) {    // black-and-white or sepia
+            if (!suits(f)) {
                 f.delete();
                 continue;
             }
@@ -358,7 +367,30 @@ final class Feed {
         return true;
     }
 
-    /** 1920 px URLs of landscape-shaped photos matching a Commons file search, from a result offset. */
+    /** 1920 px URLs of {@code count} random files from a list of Commons titles ("File:..."). */
+    private static List<String> commonsFiles(String[] titles, int count) throws IOException, JSONException {
+        List<String> pick = new ArrayList<>(java.util.Arrays.asList(titles));
+        Collections.shuffle(pick);
+        List<String> out = new ArrayList<>();
+        if (pick.isEmpty() || count <= 0) return out;
+        JSONObject q = new JSONObject(Net.get("https://commons.wikimedia.org/w/api.php?action=query&format=json"
+                + "&titles=" + URLEncoder.encode(android.text.TextUtils.join("|", pick.subList(0, Math.min(count, pick.size()))), "UTF-8")
+                + "&prop=imageinfo&iiprop=url&iiurlwidth=1920", null)).optJSONObject("query");
+        JSONObject pages = q == null ? null : q.optJSONObject("pages");
+        if (pages == null) return out;
+        for (java.util.Iterator<String> it = pages.keys(); it.hasNext(); ) {
+            JSONArray ii = pages.getJSONObject(it.next()).optJSONArray("imageinfo");
+            String url = ii == null ? "" : ii.getJSONObject(0).optString("thumburl");
+            if (!url.isEmpty()) out.add(url);
+        }
+        return out;
+    }
+
+    /**
+     * 1920 px URLs of landscape-shaped photos matching a Commons file search, from a result offset.
+     * No wider than 1.9:1: panoramas lose most of themselves when cropped to the 16:9 screen, and
+     * the owner turned down 14 of the 17 wider ones offered.
+     */
     private static List<String> commonsWide(String search, int offset) throws IOException, JSONException {
         List<String> out = new ArrayList<>();
         JSONObject q = new JSONObject(Net.get("https://commons.wikimedia.org/w/api.php?action=query&format=json"
@@ -374,27 +406,38 @@ final class Feed {
             JSONObject info = ii.getJSONObject(0);
             int w = info.optInt("width"), h = info.optInt("height");
             String url = info.optString("thumburl");
-            if (w >= 1920 && w >= h * 1.45 && info.optInt("thumbwidth") <= 1920 && !url.isEmpty()) out.add(url);
+            if (w >= 1920 && w >= h * 1.45 && w <= h * 1.9 && info.optInt("thumbwidth") <= 1920 && !url.isEmpty()) {
+                out.add(url);
+            }
         }
         return out;
     }
 
-    /** Whether a picture has real colour: the average gap between its strongest and weakest channel. */
-    private static boolean colourful(File f) {
+    /**
+     * Whether a picture suits the screen, from a downsampled copy: real colour (the average gap
+     * between strongest and weakest channel at least 16, so not black-and-white or sepia), but not
+     * garish (at most 100: neon, aurora and tropical-reef blues were all rejected), and not washed
+     * out (average brightness at most 150 of 255: snowfields and hazy white skies were rejected).
+     * The limits come from the owner's picks: every loved picture falls between them.
+     */
+    private static boolean suits(File f) {
         android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
         o.inSampleSize = 32;
         android.graphics.Bitmap b = android.graphics.BitmapFactory.decodeFile(f.getPath(), o);
         if (b == null) return false;
-        long chroma = 0;
+        long chroma = 0, luma = 0;
         int w = b.getWidth(), h = b.getHeight();
         int[] px = new int[w * h];
         b.getPixels(px, 0, w, 0, 0, w, h);
         b.recycle();
+        if (px.length == 0) return false;
         for (int p : px) {
             int r = (p >> 16) & 0xFF, g = (p >> 8) & 0xFF, bl = p & 0xFF;
             chroma += Math.max(r, Math.max(g, bl)) - Math.min(r, Math.min(g, bl));
+            luma += (299 * r + 587 * g + 114 * bl) / 1000;
         }
-        return px.length > 0 && chroma / px.length >= 22;
+        chroma /= px.length;
+        return chroma >= 16 && chroma <= 100 && luma / px.length <= 150;
     }
 
     private static List<String> bing() {

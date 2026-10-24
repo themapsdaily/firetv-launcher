@@ -42,6 +42,10 @@ final class Taste {
     /** Never: kids, news, reality, soap, talk, family; horror and TV films. */
     static final String NO_TV = "10762|10763|10764|10766|10767|10751", NO_MOVIE = "10751|27|10770";
 
+    /** Sports followed, for the score pill and the Sports view. Names as ESPN spells them. */
+    static final String[] CRICKET = {"India", "Royal Challengers Bengaluru"};
+    static final String[] TENNIS = {"Elena Rybakina", "Maja Chwalinska"};
+
     /**
      * Spotify shelf, shown before India's charts: top artists and the albums behind the top tracks,
      * last 4 weeks and 6 months (Spotify, 2026-10-23). Name, artist (empty for an artist), 640 px art.
@@ -53,5 +57,22 @@ final class Taste {
             {"Favourite Worst Nightmare", "Arctic Monkeys", "https://i.scdn.co/image/ab67616d0000b273b1f8da74f225fa1225cdface"},
             {"Cool It Down", "Yeah Yeah Yeahs", "https://i.scdn.co/image/ab67616d0000b273667ca33e4b6d8e74b17a6529"},
             {"Submarine", "The Marías", "https://i.scdn.co/image/ab67616d0000b2738aa339341a0b0c813909c831"},
+    };
+
+    /**
+     * Wikimedia Commons pictures the owner loved as backgrounds (picked 2026-10-23), a few of which
+     * join the photo pool on every refresh: Tübingen at blue hour, Esztergom by night, Hong Kong at
+     * night, Étretat in the evening, a heath at sunset, a village road in Hérault, the Gorges du
+     * Tarn, and a stargazer under the Milky Way.
+     */
+    static final String[] PHOTOS_LOVED = {
+            "File:Tübingen - Altstadt - Neckarfront - Ansicht von Neckarinsel in blauer Stunde (1).jpg",
+            "File:Esztergom by night 01 - Simor János utca.jpg",
+            "File:Victoria Harbour skyscrapers.jpg",
+            "File:Manneporte en soir.jpg",
+            "File:Haltern am See, Westruper Heide -- 2015 -- 7985-9.jpg",
+            "File:Villeneuvette, Hérault 02.jpg",
+            "File:01 Gorges du Tarn Roc des Hourtous.jpg",
+            "File:018 Human looking at the stars during Perseids with the Milky Way in the background Photo by Giles Laurent.jpg",
     };
 }

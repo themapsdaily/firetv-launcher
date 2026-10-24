@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Only for Feed: TMDB pictures, Bing photos and Open-Meteo weather. No analytics, no ads. -->
+    <!-- Only for Feed (TMDB pictures, Bing photos, Open-Meteo weather) and Sports (ESPN, Jolpica). No analytics, no ads. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Only for Tidy: closes the dock apps' background processes when memory runs low. -->
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
@@ -38,6 +38,14 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The Sports view: fixtures, live scores and results for followed sports. -->
+        <activity
+            android:name=".Scoreboard"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|uiMode" />
 
         <!-- Fire OS only: replaces Amazon's home whenever it comes up. See Guard.java. -->
         <service

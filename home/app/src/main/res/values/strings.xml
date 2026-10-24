@@ -4,5 +4,5 @@
     <string name="guard_label">Home button</string>
     <string name="dream_label">Clock and photos</string>
     <string name="watcher_label">Continue watching</string>
-    <string name="guard_description">Opens Home instead of Amazon\'s home screen when you press the Home button. Reads nothing on screen.</string>
+    <string name="guard_description">Opens Home instead of Amazon\'s home screen when you press the Home button, and shows live scores for the sports you follow. Reads only which app is in front and the menu button, which closes the score pill; nothing on screen.</string>
 </resources>

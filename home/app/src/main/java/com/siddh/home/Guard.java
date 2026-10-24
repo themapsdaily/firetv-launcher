@@ -14,6 +14,7 @@ import android.graphics.PixelFormat;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
@@ -32,8 +33,14 @@ import android.view.accessibility.AccessibilityEvent;
  *
  * The remote's app buttons go through the Appstore's AppLaunchActivity. For an app that is disabled
  * (Amazon Music, after the debloat) the Appstore then shows its details page; when that page follows
- * a button launch within {@link #BUTTON_MS}, Spotify opens instead. Idea from bansiman's Home Return
+ * a button launch within {@link #BUTTON_MS}, Spotify opens instead. AppLaunchActivity also opens
+ * every store page reached by selecting something (a search result, a "get this app" link), so a
+ * launch that follows a select press within {@link #SELECT_MS} is the owner choosing, not the button. Idea from bansiman's Home Return
  * (https://github.com/bansiman/cleanyourtv/tree/my-tv, MIT).
+ *
+ * Guard also hosts the sports score pill ({@link Scores}): it is always running, may draw over
+ * other apps, and knows from these window events which app is in front. It also sees remote keys
+ * first, so the pill can be closed over any app.
  */
 public final class Guard extends AccessibilityService {
     static final String AMAZON = "com.amazon.tv.launcher";
@@ -46,6 +53,7 @@ public final class Guard extends AccessibilityService {
     private static final ComponentName MUSIC_BUTTON =
             new ComponentName("com.spotify.tv.android", "com.spotify.tv.android.SpotifyTVActivity");
     private static final long BUTTON_MS = 5000;
+    private static final long SELECT_MS = 3000;
 
     private static volatile boolean paused;
     private static Guard running;
@@ -54,8 +62,10 @@ public final class Guard extends AccessibilityService {
     private final Runnable uncover = this::uncover;
     private final Runnable launch = () -> home(this);
     private View cover;
+    private Scores scores;
     private long lastLaunch;
     private long buttonLaunch;
+    private long selectAt;
 
     /** Lets Amazon's home stay on screen until the user leaves it. */
     static void pause() {
@@ -113,12 +123,15 @@ public final class Guard extends AccessibilityService {
         lp.windowAnimations = 0;
         ((WindowManager) getSystemService(WINDOW_SERVICE)).addView(view, lp);
         cover = view;
+        scores = new Scores(this);
+        scores.start();
     }
 
     @Override
     public void onDestroy() {
         handler.removeCallbacks(uncover);
         handler.removeCallbacks(launch);
+        if (scores != null) scores.stop();
         if (cover != null) ((WindowManager) getSystemService(WINDOW_SERVICE)).removeView(cover);
         if (running == this) running = null;
         super.onDestroy();
@@ -129,8 +142,10 @@ public final class Guard extends AccessibilityService {
         if (e.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
         CharSequence pkg = e.getPackageName(), cls = e.getClassName();
         if (pkg == null) return;
+        if (scores != null) scores.foreground(pkg.toString(), cls == null ? "" : cls.toString());
         if (cls != null && APP_LAUNCH.contentEquals(cls)) {
-            buttonLaunch = SystemClock.uptimeMillis();
+            long now = SystemClock.uptimeMillis();
+            buttonLaunch = now - selectAt < SELECT_MS ? 0 : now;
         } else if (cls != null && APP_DETAILS.contentEquals(cls) && buttonLaunch != 0
                 && SystemClock.uptimeMillis() - buttonLaunch < BUTTON_MS) {
             buttonLaunch = 0;
@@ -194,6 +209,20 @@ public final class Guard extends AccessibilityService {
     private void uncover() {
         handler.removeCallbacks(uncover);
         if (cover != null) cover.setVisibility(View.GONE);
+    }
+
+    /**
+     * Every remote key passes here first (flagRequestFilterKeyEvents): select presses are noted for
+     * the music-button check, and only the score pill may keep a key.
+     */
+    @Override
+    protected boolean onKeyEvent(KeyEvent e) {
+        int k = e.getKeyCode();
+        if (e.getAction() == KeyEvent.ACTION_DOWN && (k == KeyEvent.KEYCODE_DPAD_CENTER
+                || k == KeyEvent.KEYCODE_ENTER || k == KeyEvent.KEYCODE_NUMPAD_ENTER)) {
+            selectAt = SystemClock.uptimeMillis();
+        }
+        return scores != null && scores.key(e);
     }
 
     @Override

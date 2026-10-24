@@ -43,11 +43,6 @@ final class Gallery extends View {
         void onSlide(Feed.Item item, Bitmap logo);
     }
 
-    interface DepthListener {
-        /** A new slide wants the clock {@code dy} px lower (negative: higher). Main thread. */
-        void onDepth(float dy);
-    }
-
     private static final long QUICK_FADE_MS = 450;
 
     private static final class Slide {
@@ -57,17 +52,12 @@ final class Gallery extends View {
         float dx, dy;
         boolean card;           // square art: a sharp card over its own blur
         BitmapShader shader;
-        /** Depth effect: the picture below its skyline (rows from fgTop), drawn over the clock. */
-        Bitmap fg;
-        int fgTop;
-        /** Framing: extra zoom, vertical anchor (0 top .. 1 bottom), and how far the clock moves. */
-        float zoom = 1f, anchor = 0.5f, shift;
     }
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final ExecutorService decoder = Executors.newSingleThreadExecutor();
     private final Random random = new Random();
-    private final Runnable frame = this::redraw;
+    private final Runnable frame = this::invalidate;
 
     private long frameMs = 33, slideMs = 8000, fadeMs = 1200;
     private float zoomFrom = 1.04f, zoomBy = 0.08f;
@@ -105,9 +95,6 @@ final class Gallery extends View {
     private boolean spotOn;
     private float spotX, spotY, spotR, spotStrength = 1f;
     private final boolean still;
-    private RectF depth;
-    private DepthListener depthListener;
-    private View depthLayer;
 
     Gallery(Context c) {
         super(c);
@@ -135,35 +122,6 @@ final class Gallery extends View {
     /** Time between frames while pictures move; the screensaver's slow drift needs fewer. */
     void setFrameMs(long ms) {
         frameMs = ms;
-    }
-
-    /**
-     * The iOS lock screen's depth effect: {@code glyphs} is where the clock's digits are on screen.
-     * Pictures with a clear skyline get the part in front of it cut out, which {@link #depthLayer()}
-     * draws over the clock so a mountain or skyline hides the bottom of the time. Set before
-     * {@link #setItems}.
-     */
-    void setDepth(RectF glyphs, DepthListener l) {
-        depth = glyphs;
-        depthListener = l;
-    }
-
-    /** A view to stack over the clock: the current pictures' foregrounds, moving with them. */
-    View depthLayer() {
-        if (depthLayer == null) {
-            depthLayer = new View(getContext()) {
-                @Override
-                protected void onDraw(Canvas c) {
-                    drawDepth(c);
-                }
-            };
-        }
-        return depthLayer;
-    }
-
-    private void redraw() {
-        invalidate();
-        if (depthLayer != null) depthLayer.invalidate();
     }
 
     void setScrims(boolean on) {
@@ -286,6 +244,19 @@ final class Gallery extends View {
         ui.removeCallbacks(frame);
     }
 
+    /**
+     * Drops every picture (and with them their GPU textures), for while Home is out of sight: the
+     * stick has 1 GB, and some 50 MB of slides would otherwise sit idle under the app in front.
+     */
+    void clear() {
+        generation++;
+        items = new ArrayList<>();
+        loading = false;
+        prev = null;
+        cur = null;
+        invalidate();
+    }
+
     void release() {
         stop();
         decoder.shutdownNow();
@@ -296,15 +267,12 @@ final class Gallery extends View {
         final int gen = generation;
         final Feed.Item item = items.get(i);
         final int w = maxW;
-        final RectF glyphs = depth == null ? null : new RectF(depth);
-        final int vw = getWidth(), vh = getHeight();
         decoder.execute(() -> {
             Slide s = new Slide();
             s.item = item;
             s.bmp = decode(item.image, w, Bitmap.Config.RGB_565);
             if (s.bmp != null) s.frost = frost(s.bmp);
             s.card = item.is(Feed.CARD) && s.bmp != null;
-            if (s.bmp != null && !s.card && glyphs != null && vw > 0) cutout(s, glyphs, vw, vh);
             if (s.card) s.shader = new BitmapShader(s.bmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
             if (item.logo != null) s.logo = decode(item.logo, 640, Bitmap.Config.ARGB_8888);
             ui.post(() -> shown(s, gen, quick));
@@ -328,12 +296,11 @@ final class Gallery extends View {
         s.start = SystemClock.uptimeMillis();
         s.fade = quick || cur == null ? QUICK_FADE_MS : fadeMs;
         s.dx = random.nextBoolean() ? 1f : -1f;
-        s.dy = s.fg != null ? 0f : random.nextBoolean() ? 1f : -1f;    // a framed skyline stays put
+        s.dy = random.nextBoolean() ? 1f : -1f;
         prev = cur;
         cur = s;
         if (listener != null) listener.onSlide(s.item, s.logo);
-        if (depthListener != null) depthListener.onDepth(s.fg != null ? s.shift : 0f);
-        redraw();
+        invalidate();
     }
 
     static Bitmap decode(File f, int maxW, Bitmap.Config config) {
@@ -405,7 +372,8 @@ final class Gallery extends View {
         left.setShader(new LinearGradient(0, 0, w * 0.62f, 0, 0x99000000, 0x00000000, Shader.TileMode.CLAMP));
         top.setShader(new LinearGradient(0, 0, 0, h * 0.2f, 0x59000000, 0x00000000, Shader.TileMode.CLAMP));
         bottom.setShader(new LinearGradient(0, h * 0.5f, 0, h, 0x00000000, 0xB3000000, Shader.TileMode.CLAMP));
-        box.set(w * 0.58f, h * 0.1f, w * 0.92f, h * 0.64f);
+        // Clear of the status bar above (it ends near 0.11 h) and the dock below, set in from the edge.
+        box.set(w * 0.56f, h * 0.17f, w * 0.86f, h * 0.66f);
         cardShadow.setShadowLayer(h * 0.05f, 0, h * 0.02f, 0xB3000000);
         if (spotOn) makeSpot();
     }
@@ -533,208 +501,12 @@ final class Gallery extends View {
         if (b == null || alpha <= 0f) return;
         float t = still ? 0.5f : Math.min(1f, Math.max(0f, (now - s.start) / (float) (slideMs + s.fade)));
         float bw = s.bmp.getWidth(), bh = s.bmp.getHeight();
-        float scale = Math.max(w / bw, h / bh) * (zoomFrom + zoomBy * t) * s.zoom;
+        float scale = Math.max(w / bw, h / bh) * (zoomFrom + zoomBy * t);
         float px = (t - 0.5f) * s.dx * w * 0.03f, py = (t - 0.5f) * s.dy * h * 0.02f;
         m.setScale(scale * bw / b.getWidth(), scale * bh / b.getHeight());
-        m.postTranslate((w - bw * scale) / 2f + px, (h - bh * scale) * s.anchor + py);
+        m.postTranslate((w - bw * scale) / 2f + px, (h - bh * scale) / 2f + py);
         bmp.setAlpha((int) (255 * alpha));
         c.drawBitmap(b, m, bmp);
-    }
-
-    private void drawDepth(Canvas c) {
-        if (videoMode || cur == null) return;
-        int w = getWidth(), h = getHeight();
-        long now = running ? SystemClock.uptimeMillis() : stoppedAt;
-        float curAlpha = Math.min(1f, (now - cur.start) / (float) cur.fade);
-        if (prev != null && prev.fg != null && curAlpha < 1f) foreground(c, prev, 1f - curAlpha, now, w, h);
-        if (cur.fg != null) foreground(c, cur, curAlpha, now, w, h);
-    }
-
-    /** A slide's foreground strip, placed exactly over the picture as {@link #picture} draws it. */
-    private void foreground(Canvas c, Slide s, float alpha, long now, int w, int h) {
-        float t = still ? 0.5f : Math.min(1f, Math.max(0f, (now - s.start) / (float) (slideMs + s.fade)));
-        float bw = s.bmp.getWidth(), bh = s.bmp.getHeight();
-        float scale = Math.max(w / bw, h / bh) * (zoomFrom + zoomBy * t) * s.zoom;
-        float px = (t - 0.5f) * s.dx * w * 0.03f, py = (t - 0.5f) * s.dy * h * 0.02f;
-        m.setTranslate(0, s.fgTop);
-        m.postScale(scale, scale);
-        m.postTranslate((w - bw * scale) / 2f + px, (h - bh * scale) * s.anchor + py);
-        bmp.setAlpha((int) (255 * alpha));
-        c.drawBitmap(s.fg, m, bmp);
-    }
-
-    /**
-     * Finds the picture's skyline and, if it would hide a little (not a lot) of the clock, cuts out
-     * what's in front of it as {@code s.fg}. Decoder thread.
-     *
-     * The skyline is where each column stops looking like the sky above it, found on a 192 px copy
-     * and then snapped to the strongest edge nearby at full size. Pictures whose sky is busy
-     * (trees, close-ups) or that would cover too much of the time get no depth effect.
-     */
-    private void cutout(Slide s, RectF glyphs, int vw, int vh) {
-        Bitmap b = s.bmp;
-        int bw = b.getWidth(), bh = b.getHeight();
-        float cover = Math.max(vw / (float) bw, vh / (float) bh) * (zoomFrom + zoomBy * 0.5f);
-
-        int sw = 192, sh = Math.max(16, Math.round(192f * bh / bw));
-        Bitmap small = Bitmap.createScaledBitmap(b, sw, sh, true);
-        int[] p = new int[sw * sh];
-        small.getPixels(p, 0, sw, 0, 0, sw, sh);
-        if (small != b) small.recycle();
-        int[] edge = new int[sw];
-        for (int x = 0; x < sw; x++) edge[x] = skyline(p, sw, sh, x);
-        edge = median(edge, 3);
-        if (!calmSky(p, sw, sh, edge)) return;
-
-        // Frame the picture (zoom in a little, anchor it higher) and move the clock up or down so
-        // the skyline hides about a fifth of the digits, and never more than 60% of any column.
-        // Skylines on a TV-shaped photo usually sit higher than that, hence the search.
-        float k = bh / (float) sh, best = Float.MAX_VALUE, bestZoom = 0, bestAnchor = 0, bestShift = 0;
-        for (float zoom : new float[] {1f, 1.1f, 1.2f, 1.3f}) {
-            float scale = cover * zoom, ox = (vw - bw * scale) / 2f;
-            for (float anchor : new float[] {0f, 0.25f, 0.5f}) {
-                float oy = (vh - bh * scale) * anchor;
-                for (float shift = -0.07f * vh; shift <= 0.15f * vh; shift += 6) {
-                    float sum = 0, most = 0;
-                    int n = 0;
-                    for (float x = glyphs.left; x <= glyphs.right; x += 6) {
-                        int xs = Math.min(sw - 1, Math.max(0, (int) ((x - ox) / scale * sw / bw)));
-                        float ys = oy + (edge[xs] + 0.5f) * k * scale;
-                        float hidden = Math.min(1f, Math.max(0f, (glyphs.bottom + shift - ys) / glyphs.height()));
-                        sum += hidden;
-                        most = Math.max(most, hidden);
-                        n++;
-                    }
-                    float mean = n == 0 ? 0 : sum / n;
-                    if (mean < 0.06f || mean > 0.35f || most > 0.6f) continue;
-                    // Prefer a fifth hidden, then the least zoom, clock movement and off-centre framing.
-                    float cost = Math.abs(mean - 0.2f) + 0.3f * (zoom - 1f) + 0.3f * Math.abs(shift) / vh
-                            + 0.05f * Math.abs(anchor - 0.5f);
-                    if (cost < best) {
-                        best = cost;
-                        bestZoom = zoom;
-                        bestAnchor = anchor;
-                        bestShift = shift;
-                    }
-                }
-            }
-        }
-        if (best == Float.MAX_VALUE) return;
-        float scale = cover * bestZoom, ox = (vw - bw * scale) / 2f, oy = (vh - bh * scale) * bestAnchor;
-        glyphs = new RectF(glyphs.left, glyphs.top + bestShift, glyphs.right, glyphs.bottom + bestShift);
-
-        // Full-size strip around the clock; below it the picture is already in front.
-        int top = Math.max(0, (int) ((glyphs.top - vh * 0.04f - oy) / scale));
-        int bottom = Math.min(bh, (int) ((glyphs.bottom + vh * 0.06f - oy) / scale));
-        int rows = bottom - top;
-        if (rows < 8) return;
-        int[] px = new int[bw * rows];
-        b.getPixels(px, 0, bw, 0, top, bw, rows);
-        int[] fine = new int[bw];
-        int reach = Math.max(2, Math.round(k * 1.5f));
-        for (int x = 0; x < bw; x++) {
-            float cx = Math.max(0f, Math.min(sw - 1f, (x + 0.5f) * sw / bw - 0.5f));
-            int x0 = (int) cx, x1 = Math.min(sw - 1, x0 + 1);
-            float yc = ((edge[x0] + (edge[x1] - edge[x0]) * (cx - x0)) + 0.5f) * k;
-            if (yc >= bh - 1) {
-                fine[x] = bottom;
-                continue;
-            }
-            int sharpest = Math.round(yc), score = -1;
-            for (int y = Math.max(top + 2, Math.round(yc) - reach); y <= Math.min(bottom - 1, Math.round(yc) + reach); y++) {
-                int d = dist(px[(y - top) * bw + x], px[(y - 2 - top) * bw + x]);
-                if (d > score) {
-                    score = d;
-                    sharpest = y - 1;
-                }
-            }
-            fine[x] = sharpest;
-        }
-        fine = median(fine, 5);
-
-        for (int r = 0; r < rows; r++) {
-            int y = top + r;
-            for (int x = 0; x < bw; x++) {
-                int i = r * bw + x;
-                float a = Math.min(1f, Math.max(0f, (y - fine[x] + 1.5f) / 3f));
-                if (a <= 0f) {
-                    px[i] = 0;
-                    continue;
-                }
-                int c = px[i];
-                // The spot darkens the picture under the clock; darken the cut-out to match.
-                float keep = 1f;
-                if (spotOn) keep = 1f - spotStrength * spotAlpha((float) Math.hypot(ox + x * scale - spotX, oy + y * scale - spotY) / spotR);
-                int rr = (int) (((c >> 16) & 0xFF) * keep), gg = (int) (((c >> 8) & 0xFF) * keep), bb = (int) ((c & 0xFF) * keep);
-                px[i] = ((int) (a * 255) << 24) | (rr << 16) | (gg << 8) | bb;
-            }
-        }
-        s.fg = Bitmap.createBitmap(px, bw, rows, Bitmap.Config.ARGB_8888);
-        s.fgTop = top;
-        s.zoom = bestZoom;
-        s.anchor = bestAnchor;
-        s.shift = bestShift;
-    }
-
-    /** The first row where column x stops looking like the sky above it for 5 rows, or sh. */
-    private static int skyline(int[] p, int sw, int sh, int x) {
-        float r = 0, g = 0, b = 0;
-        for (int y = 0; y < 3; y++) {
-            int c = p[y * sw + x];
-            r += ((c >> 16) & 0xFF) / 3f;
-            g += ((c >> 8) & 0xFF) / 3f;
-            b += (c & 0xFF) / 3f;
-        }
-        int run = 0;
-        for (int y = 3; y < sh; y++) {
-            int c = p[y * sw + x];
-            int cr = (c >> 16) & 0xFF, cg = (c >> 8) & 0xFF, cb = c & 0xFF;
-            if (Math.abs(cr - r) + Math.abs(cg - g) + Math.abs(cb - b) > 54) {
-                if (++run == 5) return y - 4;
-            } else {
-                run = 0;
-                r += (cr - r) * 0.2f;
-                g += (cg - g) * 0.2f;
-                b += (cb - b) * 0.2f;
-            }
-        }
-        return sh;
-    }
-
-    /** A real sky: at least a quarter of the picture on average, and smooth (no leaves or fur). */
-    private static boolean calmSky(int[] p, int sw, int sh, int[] edge) {
-        long rough = 0, area = 0, depthSum = 0;
-        for (int x = 0; x < sw - 1; x++) {
-            depthSum += edge[x];
-            for (int y = 0; y < edge[x] - 1; y++) {
-                int c = p[y * sw + x];
-                rough += dist(c, p[(y + 1) * sw + x]) + dist(c, p[y * sw + x + 1]);
-                area++;
-            }
-        }
-        return depthSum / (float) (sw - 1) >= sh * 0.25f && area > 0 && rough / (float) area < 18f;
-    }
-
-    private static int dist(int a, int b) {
-        return Math.abs(((a >> 16) & 0xFF) - ((b >> 16) & 0xFF)) + Math.abs(((a >> 8) & 0xFF) - ((b >> 8) & 0xFF))
-                + Math.abs((a & 0xFF) - (b & 0xFF));
-    }
-
-    private static int[] median(int[] v, int width) {
-        int[] out = new int[v.length], win = new int[width];
-        for (int i = 0; i < v.length; i++) {
-            for (int j = 0; j < width; j++) win[j] = v[Math.min(v.length - 1, Math.max(0, i + j - width / 2))];
-            java.util.Arrays.sort(win);
-            out[i] = win[width / 2];
-        }
-        return out;
-    }
-
-    /** The spot's darkness at distance d (in radii) from its centre, matching {@link #makeSpot}. */
-    private static float spotAlpha(float d) {
-        if (d >= 1f) return 0f;
-        if (d <= 0.55f) return (0x8C + (0x4D - 0x8C) * d / 0.55f) / 255f;
-        return 0x4D * (1f - (d - 0.55f) / 0.45f) / 255f;
     }
 
     private void haze(Canvas c, Bitmap b, int alpha, int w, int h) {

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The chequered flag, on the race row. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="34dp" android:height="24dp" android:viewportWidth="34" android:viewportHeight="24">
+    <path android:fillColor="#FFF4F5F7" android:pathData="M4,0h26a4,4 0 0,1 4,4v16a4,4 0 0,1 -4,4h-26a4,4 0 0,1 -4,-4v-16a4,4 0 0,1 4,-4z" />
+    <path android:fillColor="#FF0A0B0D"
+        android:pathData="M0,0h8.5v8H0zM17,0h8.5v8H17zM8.5,8H17v8H8.5zM25.5,8H34v8h-8.5zM0,16h8.5v8H0zM17,16h8.5v8H17z" />
+</vector>

@@ -14,6 +14,21 @@ final class Fonts {
 
     private Fonts() {}
 
+    private static final java.util.Map<String, Typeface> files = new java.util.HashMap<>();
+
+    /** A static font file in assets/fonts (Barlow, SIL OFL: see BARLOW-LICENSE-OFL.txt), loaded once. */
+    static Typeface file(Context c, String name) {
+        Typeface t = files.get(name);
+        if (t != null) return t;
+        try {
+            t = Typeface.createFromAsset(c.getAssets(), "fonts/" + name + ".ttf");
+        } catch (RuntimeException e) {
+            t = Typeface.create("sans-serif-condensed", Typeface.BOLD);
+        }
+        files.put(name, t);
+        return t;
+    }
+
     static Typeface outfit(Context c, int weight) {
         Typeface t = cache.get(weight);
         if (t != null) return t;

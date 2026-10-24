@@ -68,6 +68,8 @@ public final class Home extends Activity {
     /** macOS-style dock magnification by distance from the focused tile. */
     private static final float[] MAGNIFY = {1.5f, 1.2f, 1.06f};
     private static final long MAGNIFY_MS = 260;
+    /** Status-bar tile size, in design pixels. */
+    private static final int TILE = 64;
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -83,7 +85,9 @@ public final class Home extends Activity {
     private LinearLayout titles, hello, top;
     private TextView overline, title, detail, helloLine, helloHead, weatherPill;
     private ImageView logo;
-    private final List<TextView> pills = new ArrayList<>();
+    private final List<ImageView> pills = new ArrayList<>();
+    private final List<String> pillNames = new ArrayList<>();
+    private TextView pillLabel;
     private final List<Runnable> pillActions = new ArrayList<>();
 
     private List<Apps.App> apps = new ArrayList<>();
@@ -144,6 +148,7 @@ public final class Home extends Activity {
             updateShelf();
         };
         gallery.start();
+        updateShelf();      // its pictures were dropped in onStop
         showWeather();
         final List<Apps.App> dock = new ArrayList<>(apps);
         worker.execute(() -> Tidy.maybe(this, dock));
@@ -172,6 +177,18 @@ public final class Home extends Activity {
         ui.removeCallbacks(nextLine);
     }
 
+    @Override
+    protected void onStop() {
+        super.onStop();
+        gallery.clear();
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_UI_HIDDEN) gallery.clear();
+    }
+
     /** HOME pressed while already home: back to the dock. */
     @Override
     protected void onNewIntent(Intent intent) {
@@ -191,12 +208,21 @@ public final class Home extends Activity {
     /**
      * Settings arrive as launch extras, e.g. from install.sh:
      * {@code am start -n com.siddh.home/.Home --es name Sid --es city Pune --es tmdb <key>}.
+     * The score pill's settings are described in {@link Scores}.
      */
     private void rememberConfig(Intent i) {
         if (i == null) return;
+        android.content.SharedPreferences.Editor sp = Apps.prefs(this).edit();
+        if (i.hasExtra("scores")) sp.putBoolean("scores.off", !i.getBooleanExtra("scores", true));
+        if (i.hasExtra("scores_hide")) sp.putString("scores.hide", i.getStringExtra("scores_hide"));
+        if (i.hasExtra("f1_sessions")) sp.putString("f1.sessions", i.getStringExtra("f1_sessions"));
+        sp.apply();
         String n = i.getStringExtra("name"), key = i.getStringExtra("tmdb"), city = i.getStringExtra("city");
         if (!TextUtils.isEmpty(n)) Apps.prefs(this).edit().putString("name", n.trim()).apply();
-        if (i.getBooleanExtra("refresh", false)) Feed.invalidate(this);
+        if (i.getBooleanExtra("refresh", false)) {
+            Feed.invalidate(this);
+            worker.execute(() -> Sports.invalidate(this));
+        }
         if (!TextUtils.isEmpty(key) && !key.trim().equals(Apps.prefs(this).getString("tmdb", ""))) {
             Apps.prefs(this).edit().putString("tmdb", key.trim()).apply();
             Feed.invalidate(this);
@@ -339,37 +365,77 @@ public final class Home extends Activity {
         return lp;
     }
 
-    /** Top-right: quick buttons (shown when focus moves up), then the clock pill with an avatar. */
+    /**
+     * Top-right, floating tiles (the owner's status-bar-options.html, option D): weather, clock
+     * and avatar each sit on their own dark rounded square. Moving up pops the quick buttons in
+     * to their left as square icon tiles, one after another; the focused one grows a little and
+     * turns white, and its name shows underneath.
+     */
     private View buildTop() {
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setGravity(Gravity.END);
+        column.setClipChildren(false);
         top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.setClipChildren(false);
-        if (!inputs().isEmpty()) pill("Inputs", this::openInputs);
-        pill("Wi-Fi", () -> launch(new Intent(Settings.ACTION_WIFI_SETTINGS)));
-        pill("Settings", this::openSettings);
+        // On top of Home in its own task: launch()'s RESET_TASK_IF_NEEDED would clear it straight away.
+        pill(R.drawable.sport_trophy, "Sports", () -> startActivity(new Intent(this, Scoreboard.class)));
+        if (!inputs().isEmpty()) pill(R.drawable.top_inputs, "Inputs", this::openInputs);
+        pill(R.drawable.top_wifi, "Wi-Fi", () -> launch(new Intent(Settings.ACTION_WIFI_SETTINGS)));
+        pill(R.drawable.top_settings, "Settings", this::openSettings);
+
+        weatherPill = new TextView(this);
+        weatherPill.setTextColor(0xFFF4F5F7);
+        weatherPill.setTextSize(TypedValue.COMPLEX_UNIT_PX, px(28));
+        weatherPill.setTypeface(Fonts.file(this, "BarlowCondensed-SemiBold"));
+        weatherPill.setIncludeFontPadding(false);
+        weatherPill.setGravity(Gravity.CENTER_VERTICAL);
+        weatherPill.setCompoundDrawablePadding(px(8));
+        weatherPill.setPadding(px(18), 0, px(20), 0);
+        weatherPill.setBackground(tile());
+        top.addView(weatherPill, margins(-2, px(TILE), 0, 0, px(10), 0));
 
         LinearLayout clock = new LinearLayout(this);
         clock.setGravity(Gravity.CENTER_VERTICAL);
-        clock.setBackground(round(0x40000000, 0x26FFFFFF));
-        clock.setPadding(px(26), px(8), px(8), px(8));
+        clock.setPadding(px(20), 0, px(20), 0);
+        clock.setBackground(tile());
         TextClock time = new TextClock(this);
-        time.setFormat12Hour("h:mm a");
+        time.setFormat12Hour("h:mm");
         time.setFormat24Hour("H:mm");
-        time.setTextColor(0xFFFFFFFF);
-        time.setTextSize(TypedValue.COMPLEX_UNIT_PX, px(30));
-        weatherPill = new TextView(this);
-        weatherPill.setTextColor(0xFFFFFFFF);
-        weatherPill.setTextSize(TypedValue.COMPLEX_UNIT_PX, px(30));
-        weatherPill.setGravity(Gravity.CENTER_VERTICAL);
-        weatherPill.setCompoundDrawablePadding(px(8));
-        clock.addView(weatherPill, margins(-2, -2, 0, 0, px(22), 0));
+        time.setTextColor(0xFFF4F5F7);
+        time.setTextSize(TypedValue.COMPLEX_UNIT_PX, px(36));
+        time.setTypeface(Fonts.file(this, "BarlowCondensed-Bold"));
+        time.setIncludeFontPadding(false);
         clock.addView(time);
-        clock.addView(avatar(px(54)), margins(px(54), px(54), px(18), 0, 0, 0));
-        top.addView(clock);
-        return top;
+        TextClock half = new TextClock(this);
+        half.setFormat12Hour("a");
+        half.setFormat24Hour("");
+        half.setTextColor(0xFFC9CED6);
+        half.setTextSize(TypedValue.COMPLEX_UNIT_PX, px(18));
+        half.setTypeface(Fonts.file(this, "BarlowCondensed-SemiBold"));
+        half.setIncludeFontPadding(false);
+        clock.addView(half, margins(-2, -2, px(4), px(8), 0, 0));
+        top.addView(clock, margins(-2, px(TILE), 0, 0, px(10), 0));
+
+        top.addView(avatar(px(TILE)), new LinearLayout.LayoutParams(px(TILE), px(TILE)));
+        column.addView(top, new LinearLayout.LayoutParams(-2, -2));
+        pillLabel = text(24, false);
+        pillLabel.setAlpha(0f);
+        column.addView(pillLabel, margins(-2, -2, 0, px(14), px(4), 0));
+        return column;
     }
 
-    /** The owner's picture (assets/avatar.jpg) in a circle, or their initial if it's missing. */
+    /** A floating tile's face: near-black at 78%, a hairline edge. */
+    private GradientDrawable tile() {
+        GradientDrawable d = new GradientDrawable();
+        d.setCornerRadius(px(16));
+        d.setColor(0xC70A0B0D);
+        d.setStroke(Math.max(1, px(1)), 0x1AFFFFFF);
+        return d;
+    }
+
+    /** The owner's picture (assets/avatar.jpg) filling a status-bar tile, or their initial if it's missing. */
     private View avatar(int size) {
         Bitmap face = null;
         try (java.io.InputStream in = getAssets().open("avatar.jpg")) {
@@ -385,13 +451,15 @@ public final class Home extends Activity {
                 m.setScale(size / (float) b.getWidth(), size / (float) b.getHeight());
                 shader.setLocalMatrix(m);
                 p.setShader(shader);
-                c.drawCircle(size / 2f, size / 2f, size / 2f, p);
-                // A hairline rim, like the pill it sits in.
+                float r = px(16);
+                c.drawRoundRect(0, 0, size, size, r, r, p);
+                // A hairline edge, like the other tiles.
                 p.setShader(null);
                 p.setStyle(android.graphics.Paint.Style.STROKE);
-                p.setStrokeWidth(Math.max(1, px(2)));
-                p.setColor(0x40FFFFFF);
-                c.drawCircle(size / 2f, size / 2f, size / 2f - px(1), p);
+                float w = Math.max(1, px(1));
+                p.setStrokeWidth(w);
+                p.setColor(0x1AFFFFFF);
+                c.drawRoundRect(w / 2, w / 2, size - w / 2, size - w / 2, r - w / 2, r - w / 2, p);
                 b.recycle();
             }
         } catch (IOException e) {
@@ -408,29 +476,20 @@ public final class Home extends Activity {
         initial.setText(name().substring(0, 1).toUpperCase());
         GradientDrawable dot = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 new int[] {0xFFFF8A65, 0xFFD81B60});
-        dot.setShape(GradientDrawable.OVAL);
+        dot.setCornerRadius(px(16));
         initial.setBackground(dot);
         return initial;
     }
 
-    private void pill(String label, Runnable action) {
-        TextView t = text(28, false);
-        t.setShadowLayer(0, 0, 0, 0);
-        t.setText(label);
-        t.setPadding(px(30), px(16), px(30), px(16));
-        t.setBackground(round(0x40000000, 0x26FFFFFF));
-        t.setAlpha(0f);
-        top.addView(t, margins(-2, -2, 0, 0, px(16), 0));
-        pills.add(t);
+    private void pill(int icon, String name, Runnable action) {
+        ImageView v = new ImageView(this);
+        v.setImageResource(icon);
+        v.setPadding(px(19), px(19), px(19), px(19));
+        v.setVisibility(View.GONE);
+        top.addView(v, pills.size(), margins(px(TILE), px(TILE), 0, 0, px(10), 0));
+        pills.add(v);
+        pillNames.add(name);
         pillActions.add(action);
-    }
-
-    private GradientDrawable round(int fill, int stroke) {
-        GradientDrawable d = new GradientDrawable();
-        d.setCornerRadius(px(40));
-        d.setColor(fill);
-        if (stroke != 0) d.setStroke(Math.max(1, px(1.5f)), stroke);
-        return d;
     }
 
     // ---- apps ----
@@ -660,14 +719,28 @@ public final class Home extends Activity {
         inTop = true;
         topFocus = pills.size() - 1;
         if (!apps.isEmpty()) grid.tile(focus).setFocus(false, 0, 0);
-        for (TextView p : pills) p.animate().alpha(1f).setDuration(200).start();
+        pillLabel.animate().alpha(0.9f).setDuration(200).start();
+        for (int i = 0; i < pills.size(); i++) {
+            ImageView p = pills.get(i);
+            p.animate().cancel();
+            p.setVisibility(View.VISIBLE);
+            p.setAlpha(0f);
+            p.setScaleX(0.6f);
+            p.setScaleY(0.6f);
+        }
         paintPills();
         magnify(true);
     }
 
     private void leaveTop() {
         inTop = false;
-        for (TextView p : pills) p.animate().alpha(0f).setDuration(200).start();
+        pillLabel.animate().alpha(0f).setDuration(200).start();
+        topFocus = -1;
+        for (ImageView p : pills) {
+            p.animate().cancel();
+            p.animate().alpha(0f).scaleX(0.6f).scaleY(0.6f).setStartDelay(0).setDuration(150)
+                    .withEndAction(() -> p.setVisibility(View.GONE)).start();
+        }
         if (!apps.isEmpty()) grid.tile(focus).setFocus(true, 0, 1);
         magnify(true);
     }
@@ -692,14 +765,24 @@ public final class Home extends Activity {
         paintPills();
     }
 
+    /** Paints the quick tiles while in the top bar; they pop in one after another from the left. */
     private void paintPills() {
         for (int i = 0; i < pills.size(); i++) {
-            TextView p = pills.get(i);
+            ImageView p = pills.get(i);
             boolean on = i == topFocus;
-            p.setBackground(on ? round(0xFFFFFFFF, 0) : round(0x40000000, 0x26FFFFFF));
-            p.setTextColor(on ? 0xFF111111 : 0xFFFFFFFF);
-            p.animate().scaleX(on ? 1.08f : 1f).scaleY(on ? 1.08f : 1f).setDuration(160).start();
+            GradientDrawable face = tile();
+            if (on) {
+                face.setColor(0xFFF4F5F7);
+                face.setStroke(0, 0);
+            }
+            p.setBackground(face);
+            p.setColorFilter(on ? 0xFF0A0B0D : 0xFFF4F5F7);
+            float to = on ? 1.1f : 1f;
+            boolean popping = p.getAlpha() < 1f;
+            p.animate().alpha(1f).scaleX(to).scaleY(to).setStartDelay(popping ? 50L * i : 0)
+                    .setDuration(popping ? 250 : 150).setInterpolator(new DecelerateInterpolator()).start();
         }
+        if (topFocus >= 0) pillLabel.setText(pillNames.get(topFocus));
     }
 
     // ---- shelf and titles ----
@@ -825,7 +908,7 @@ public final class Home extends Activity {
         }
         weatherPill.setVisibility(View.VISIBLE);
         weatherPill.setText(Math.round(w.temp) + "°");
-        weatherPill.setCompoundDrawables(new WeatherIcon(w.code, w.day, px(34)), null, null, null);
+        weatherPill.setCompoundDrawables(new WeatherIcon(w.code, w.day, px(28)), null, null, null);
     }
 
     private void fadeTint(int to) {

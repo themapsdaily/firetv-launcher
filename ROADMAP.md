@@ -167,10 +167,10 @@ Open items for the custom Fire TV UI (`home/`). Status key: **Open** (not starte
 
 ## 7. Sports view (full screen)
 
-**Goal:** selecting the score pill opens a full-screen Sports view with everything I follow: live matches, upcoming fixtures, recent results and standings. Mockup is in the chat for this item. Uses the same data and records as sections 4 and 5.
+**Goal:** selecting the score pill opens a full-screen Sports view with everything I follow: live matches, upcoming fixtures and recent results. Mockup is in the chat for this item. Uses the same data and records as sections 4 and 5.
 
 **Layout**
-- Four tabs: **Live**, **Fixtures**, **Results**, **Standings**. Left and right move between tabs.
+- Two tabs: **Fixtures** (live matches first) and **Results**. Left and right move between tabs. No standings: not wanted (2026-10-24).
 - Three columns, one per sport: cricket (India, RCB), F1 (Verstappen, Red Bull), WTA (Rybakina, Chwalinska). Up and down move between matches.
 - Selecting a match opens its detail: full scorecard for cricket, session times and results for F1, set-by-set for tennis.
 - When a Games is on, a fourth column shows India's medal tally and events.
@@ -192,7 +192,7 @@ Making it work on a Fire TV Stick 3rd gen (Fire OS 7, Android 9):
 | Formula 1 | Red | Steering wheel |
 | WTA tennis | Green | Tennis ball |
 | Multi-sport Games | Amber | Medal |
-| Standings and rankings | Sport colour | Trophy |
+| Sports view (Home button) | White | Trophy |
 
 - Draw all icons as vector drawables in `home/app/src/main/res/drawable/`, not emoji, because emoji look different on every device and Fire OS may not render them well.
 - Keep colour as a thin top bar on each column plus the icon circle. Do not tint whole cards.
@@ -202,10 +202,9 @@ Making it work on a Fire TV Stick 3rd gen (Fire OS 7, Android 9):
 **Data needs beyond section 5**
 - Fixtures for the next 2 to 4 weeks, cached daily.
 - Results for the last 2 weeks, stored once a match ends, so they cost no more API calls.
-- Standings: F1 drivers and constructors, WTA ranking of the followed players, IPL points table during the season.
 
 **Tasks**
-- [ ] Add `fixtures/upcoming`, `results/recent` and `standings` routes to the shared record.
+- [ ] Add `fixtures/upcoming`, and `results/recent` routes to the shared record.
 - [ ] Add a small local store for fixtures and results, so the view opens at once and works with a poor connection.
 - [ ] Make the stadium background image and the pre-blurred copy, and build a glass panel view that draws its blurred slice.
 - [ ] **Spike:** time the glass panels on the stick; drop to a plain translucent fill if scrolling is not smooth.

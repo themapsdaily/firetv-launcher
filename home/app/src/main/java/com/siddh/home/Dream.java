@@ -30,24 +30,23 @@ import java.util.Random;
 
 /**
  * The screensaver, after the iOS lock screen: a landscape photo drifting slowly, the date, a giant
- * clock that the photo's skyline can hide the bottom of (depth effect), the weather, and a glass
- * "now playing" bar while music or a video plays.
+ * clock, the weather, and a glass "now playing" bar while music or a video plays. Barlow Condensed,
+ * like Home's status bar.
  */
 public final class Dream extends DreamService {
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final Random random = new Random();
     private Gallery gallery;
-    private LinearLayout face, front, bar;
-    private TextView weather, weatherGhost, songTitle, songArtist;
-    private List<Feed.Item> pool;
+    private LinearLayout face, bar;
+    private TextView weather, songTitle, songArtist;
     private ImageView art;
     private Progress progress;
     private RectF barRect;
     private float s;
     private int W, H;
     private boolean barShown;
-    /** Where the face sits: the picture's depth shift plus a small anti burn-in drift. */
-    private float shiftY, driftX, driftY;
+    /** A small anti burn-in drift of the face. */
+    private float driftX, driftY;
 
     private final Runnable drift = new Runnable() {
         @Override
@@ -60,12 +59,10 @@ public final class Dream extends DreamService {
         }
     };
 
-    /** Moves both faces (they must stay in register) to the current shift, drift and bar lift. */
+    /** Moves the face to the current drift and bar lift. */
     private void place(long ms) {
-        float y = shiftY + driftY + (barShown ? -px(40) : 0);
-        for (View f : new View[] {face, front}) {
-            f.animate().translationX(driftX).translationY(y).setDuration(ms).start();
-        }
+        float y = driftY + (barShown ? -px(40) : 0);
+        face.animate().translationX(driftX).translationY(y).setDuration(ms).start();
     }
     private final Runnable tick = new Runnable() {
         @Override
@@ -84,9 +81,10 @@ public final class Dream extends DreamService {
         W = Math.max(dm.widthPixels, dm.heightPixels);
         H = Math.min(dm.widthPixels, dm.heightPixels);
         s = W / 1920f;
-        pool = Feed.pool(this);
+        setContentView(build());
+        List<Feed.Item> pool = Feed.pool(this);
         Collections.shuffle(pool);
-        setContentView(build());    // the pictures start once the clock is laid out
+        gallery.setItems(pool);
         showWeather();
         Feed.refresh(this, () -> ui.post(this::showWeather));
     }
@@ -142,13 +140,9 @@ public final class Dream extends DreamService {
         gallery.setSpot(W / 2f, H * 0.30f, W * 0.46f, 1f);
         root.addView(gallery, new FrameLayout.LayoutParams(-1, -1));
 
-        // The iOS lock screen: date, a big clock, then the weather. The clock sits behind the
-        // pictures' foreground (depth layer), so a skyline can hide the bottom of the time.
-        face = face(false);
+        // The iOS lock screen: date, a big clock, then the weather.
+        face = face();
         root.addView(face, faceParams());
-        root.addView(gallery.depthLayer(), new FrameLayout.LayoutParams(-1, -1));
-        front = face(true);
-        root.addView(front, faceParams());
 
         // Now playing: a glass bar near the bottom. Gallery draws the glass; these sit on it.
         int bw = Math.round(W * 0.44f), bh = px(132);
@@ -196,18 +190,16 @@ public final class Dream extends DreamService {
         return root;
     }
 
-    /**
-     * Date, clock and weather. Built twice with one layout: behind the depth layer only the clock
-     * shows, in front of it only the date and weather, so the words are never hidden.
-     */
-    private LinearLayout face(boolean inFront) {
+    /** Date, clock and weather. */
+    private LinearLayout face() {
         LinearLayout f = new LinearLayout(this);
         f.setOrientation(LinearLayout.VERTICAL);
         f.setGravity(Gravity.CENTER_HORIZONTAL);
         TextClock date = new TextClock(this);
         date.setFormat12Hour("EEEE d MMMM");
         date.setFormat24Hour("EEEE d MMMM");
-        date.setTypeface(outfit(600));
+        date.setTypeface(Fonts.file(this, "BarlowCondensed-SemiBold"));
+        date.setLetterSpacing(0.02f);
         date.setTextSize(TypedValue.COMPLEX_UNIT_PX, px(46));
         date.setTextColor(0xF2FFFFFF);
         date.setIncludeFontPadding(false);
@@ -217,11 +209,10 @@ public final class Dream extends DreamService {
         TextClock clock = new TextClock(this);
         clock.setFormat12Hour("h:mm");
         clock.setFormat24Hour("H:mm");
-        clock.setTypeface(outfit(600));
+        clock.setTypeface(Fonts.file(this, "BarlowCondensed-Bold"));
         clock.setTextSize(TypedValue.COMPLEX_UNIT_PX, H * 0.34f);
         clock.setTextColor(0xE6EEF4FF);
         clock.setIncludeFontPadding(false);
-        clock.setLetterSpacing(-0.03f);
         clock.setShadowLayer(px(40), 0, px(6), 0x80000000);
         // Full width, centred text: a wrap_content clock can keep a stale width and clip a digit.
         clock.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -229,20 +220,14 @@ public final class Dream extends DreamService {
         cl.topMargin = px(2);
         f.addView(clock, cl);
         TextView w = text(40, 500, 0xEBFFFFFF);    // a step below the date: the time leads
+        w.setTypeface(Fonts.file(this, "BarlowCondensed-SemiBold"));
+        w.setLetterSpacing(0.02f);
         w.setGravity(Gravity.CENTER_VERTICAL);
         w.setCompoundDrawablePadding(px(16));
         LinearLayout.LayoutParams wl = new LinearLayout.LayoutParams(-2, -2);
         wl.topMargin = -Math.round(H * 0.045f);     // into the clock's empty descender space
         f.addView(w, wl);
-        if (inFront) {
-            clock.setVisibility(View.INVISIBLE);
-            weather = w;
-        } else {
-            date.setVisibility(View.INVISIBLE);
-            w.setVisibility(View.INVISIBLE);
-            weatherGhost = w;
-            clock.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> startPictures(clock));
-        }
+        weather = w;
         return f;
     }
 
@@ -252,28 +237,9 @@ public final class Dream extends DreamService {
         return fl;
     }
 
-    /** Once the clock is laid out, tells the gallery where its digits are, then starts the pictures. */
-    private void startPictures(TextClock clock) {
-        if (pool == null) return;
-        Paint p = clock.getPaint();
-        String t = clock.getText().toString();
-        android.graphics.Rect r = new android.graphics.Rect();
-        p.getTextBounds(t, 0, t.length(), r);
-        float tw = p.measureText(t);
-        float left = face.getLeft() + clock.getLeft() + (clock.getWidth() - tw) / 2f;
-        float base = face.getTop() + clock.getTop() + clock.getBaseline();
-        gallery.setDepth(new RectF(left, base + r.top, left + tw, base + r.bottom), dy -> {
-            // Glide with the cross-fade to where this picture's skyline tucks under the time.
-            shiftY = dy;
-            place(2500);
-        });
-        gallery.setItems(pool);
-        pool = null;
-    }
-
     private void showWeather() {
         Feed.Weather w = Feed.weather(this);
-        for (TextView v : new TextView[] {weather, weatherGhost}) {
+        for (TextView v : new TextView[] {weather}) {
             if (w == null) {
                 v.setText("");
                 v.setCompoundDrawables(null, null, null, null);

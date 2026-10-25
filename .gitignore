@@ -22,3 +22,4 @@ taste/cache.json
 taste/run.log
 taste/request_token.txt
 taste/*.log
+__pycache__/

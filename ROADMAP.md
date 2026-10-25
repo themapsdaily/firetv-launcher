@@ -18,8 +18,13 @@ Open items for the custom Fire TV UI (`home/`). Status key: **Open** (not starte
 - [ ] **Spike:** play one title in each of Netflix, Prime, Hotstar and FanCode, and record what each exposes through the media session (title, duration, position). Decide per app whether the live log is enough.
 - [ ] Add a local history store (app, title, start time, minutes watched).
 - [ ] Add a History shelf or screen in Home.
-- [ ] Write an importer for the Netflix viewing-activity CSV, so older history shows up too.
+- [x] Importer for past history (2026-10-25): `taste/netflix.py` reads Netflix's viewing-activity CSV and Prime's history page (copied into the same Title,Date form), merges episodes into shows and finds each on TMDB. The accounts are shared, so the owner filters out what someone else watched; those, titles watched elsewhere and wrong matches go in `taste/overrides.tsv`. The exports and lookups stay on the PC, gitignored.
+- [x] History on TMDB: `taste/tmdb_list.py` keeps a private "Watched" list on the owner's account in step with it and sends the ratings from `taste/ratings.csv` (168 titles rated, 2026-10-25).
+- [ ] Feed the ratings into `Taste.java`: seen lists from the rated titles, keywords from the best-rated ones, and the horror rule (the owner rates some horror highly).
 - [ ] Optional: sync to Trakt so history lives outside the stick.
+
+**Streaming shelves rotate daily (2026-10-25):** `Rotation.java` picks each app's five afresh every calendar day. A title shown one day rests the next and may return the day after, and a nudge that changes daily reorders the candidates. Tested off the TV (`RotationTest`) and on the emulator by moving its clock a day; on the stick since 2026-10-25.
+- [ ] Watch the shelves on the stick for a few days: they change each morning, and nothing repeats the next day.
 
 ## 2. Ads in Hotstar, Prime, FanCode, Airtel Xstream and SonyLIV
 

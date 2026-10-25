@@ -14,3 +14,11 @@ reference/
 # Personal media: race footage and the owner's avatar.
 home/art/
 home/app/src/main/assets/avatar.jpg
+
+# Personal viewing history; taste/netflix.py turns it into Taste.java ids.
+taste/*.csv
+taste/resolved.tsv
+taste/cache.json
+taste/run.log
+taste/request_token.txt
+taste/*.log

@@ -221,7 +221,10 @@ final class Feed {
                 if (now - p.getLong("weather.at", 0) > WEATHER_EVERY_MS) {
                     changed |= fetchWeather(c);
                 }
-                if (now - p.getLong("images.at", 0) > IMAGES_EVERY_MS) {
+                // Also on a new day, so the streaming shelves rotate each morning (Rotation).
+                TimeZone zone = TimeZone.getDefault();
+                if (now - p.getLong("images.at", 0) > IMAGES_EVERY_MS
+                        || !Rotation.day(now, zone).equals(Rotation.day(p.getLong("images.at", 0), zone))) {
                     boolean ok = fetchPool(c);
                     ok &= fetchServices(c);
                     if (Apps.installed(c, FANCODE)) fetchF1(c);
@@ -466,12 +469,25 @@ final class Feed {
             java.util.Map<String, Double> trend = trending(key);
             java.util.Map<Integer, List<String>> wanted = watchlist(key);
             java.util.Set<String> taken = new java.util.HashSet<>();    // each title on one shelf only
+            // Yesterday's picks rest today: counted as taken, so no shelf shows them.
+            SharedPreferences p = Apps.prefs(c);
+            String today = Rotation.day(System.currentTimeMillis(), TimeZone.getDefault());
+            String day = p.getString("shelf.day", "");
+            java.util.Set<String> ids = new java.util.HashSet<>(p.getStringSet("shelf.ids", Collections.<String>emptySet()));
+            java.util.Set<String> resting = Rotation.resting(today, day, ids, p.getString("shelf.prev.day", ""),
+                    new java.util.HashSet<>(p.getStringSet("shelf.prev.ids", Collections.<String>emptySet())));
+            taken.addAll(resting);
             for (String[] s : SERVICES) {
                 if (!Apps.installed(c, s[0])) continue;
                 for (int id : providerIds(providers, s[1])) {
-                    if (fetchService(c, key, s[0], id, trend, wanted, taken)) break;
+                    if (fetchService(c, key, s[0], id, trend, wanted, taken, today)) break;
                 }
             }
+            java.util.Set<String> shown = new java.util.HashSet<>(taken);
+            shown.removeAll(resting);
+            SharedPreferences.Editor e = p.edit();
+            if (!today.equals(day)) e.putString("shelf.prev.day", day).putStringSet("shelf.prev.ids", ids);
+            e.putString("shelf.day", today).putStringSet("shelf.ids", shown).apply();
             return true;
         } catch (IOException | JSONException e) {
             Log.w(TAG, "tmdb: " + e.getMessage());
@@ -500,12 +516,13 @@ final class Feed {
      * watchlist titles 2; titles with one of the owner's keywords and good ratings 1; well-rated
      * documentaries 0.7; recent well-rated Indian titles in liked genres 0.6; recent well-rated
      * titles in liked genres 0.5. Anything watched, already on another shelf, anime or horror is
-     * out. Each is scored on fit, this week's TMDB trending rank, popularity, rating, freshness and
-     * being Indian; the best five go up, never three series or three films in a row.
+     * out, and so is anything shown yesterday (it is in {@code taken}). Each is scored on fit, this
+     * week's TMDB trending rank, popularity, rating, freshness, being Indian and the day's nudge
+     * ({@link Rotation#nudge}); the best five go up, never three series or three films in a row.
      */
     private static boolean fetchService(Context c, String key, String pkg, int provider,
             java.util.Map<String, Double> trend, java.util.Map<Integer, List<String>> wanted,
-            java.util.Set<String> taken) throws IOException, JSONException {
+            java.util.Set<String> taken, String today) throws IOException, JSONException {
         String since = daysAgo(730);
         String base = "?watch_region=IN&with_watch_providers=" + provider
                 + "&with_watch_monetization_types=flatrate&sort_by=popularity.desc&language=en-US&page=1";
@@ -536,7 +553,7 @@ final class Feed {
         }
 
         List<JSONObject> ranked = new ArrayList<>(cand.values());
-        for (JSONObject m : ranked) m.put("_score", score(m, trend));
+        for (JSONObject m : ranked) m.put("_score", score(m, trend, today));
         Collections.sort(ranked, (a, b) -> Double.compare(b.optDouble("_score"), a.optDouble("_score")));
         List<JSONObject> picks = new ArrayList<>();
         for (JSONObject m : ranked) {
@@ -581,7 +598,7 @@ final class Feed {
         }
     }
 
-    private static double score(JSONObject m, java.util.Map<String, Double> trend) {
+    private static double score(JSONObject m, java.util.Map<String, Double> trend, String today) {
         String k = m.optString("_kind") + ":" + m.optInt("id");
         String date = m.optString("first_air_date", m.optString("release_date", ""));
         double age = yearsSince(date);
@@ -594,7 +611,8 @@ final class Feed {
                 + 0.5 * Math.min(1, Math.log10(1 + m.optDouble("popularity", 0)) / 3)  // steady popularity
                 + 0.6 * Math.max(0, m.optDouble("vote_average", 0) - 6.5) / 2.5     // rating
                 + 0.5 * Math.exp(-age / 2)                                          // freshness
-                + (indian ? 0.3 : 0);
+                + (indian ? 0.3 : 0)
+                + 1.0 * Rotation.nudge(today, k);                                   // today's shuffle
     }
 
     /** TMDB's weekly trending series and films, top 60 of each, as "tv:id"/"movie:id" to 1 (top) .. 0. */

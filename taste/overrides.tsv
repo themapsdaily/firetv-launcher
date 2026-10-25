@@ -1,0 +1,223 @@
+# Fixes for taste/netflix.py, tab separated: <title as collapsed> <tab> skip | tv:<id> | movie:<id>
+# Someone else on the account watched these, not the owner (2026-10-24):
+Shaque: Trust No One	skip
+My Brilliant Career: REVOLT	skip
+ONE PIECE	skip
+Love, Death & Robots	skip
+Scissor Seven	skip
+The Disastrous Life of Saiki K.	skip
+Pradhama Drishtya Kuttakkar	skip
+Murder Mubarak	skip
+Gandhari	skip
+Mardaani 3	skip
+Gumraah	skip
+Alpha	skip
+KARTAVYA	skip
+Panipat	skip
+Khufiya	skip
+Haq	skip
+Toaster	skip
+Maa Behen	skip
+Kara	skip
+GOAT - The Greatest of All Time	skip
+Khel Khel Mein	skip
+Do Deewane Seher Mein	skip
+Maharaj	skip
+Bade Miyan Chote Miyan	skip
+Shaitaan	skip
+STAND BY ME Doraemon 2	skip
+Bhakshak	skip
+Animal	skip
+# Sampled an episode or two, not really watched (2026-10-24):
+Conversations with a Killer: The Ted Bundy Tapes	skip
+Jeffrey Epstein: Filthy Rich	skip
+The Office (U.S.)	skip
+Alice in Borderland	skip
+Testament: The Story of Moses	skip
+# Watched outside Netflix (2026-10-24):
+Sacred Games	tv:79352
+Mirzapur	tv:84105
+The Family Man	tv:93352
+The End of the F***ing World	tv:74577
+Game of Thrones	tv:1399
+Mr. Bean	tv:4327
+Harry Potter and the Philosopher's Stone	movie:671
+Harry Potter and the Chamber of Secrets	movie:672
+Harry Potter and the Prisoner of Azkaban	movie:673
+Harry Potter and the Goblet of Fire	movie:674
+Harry Potter and the Order of the Phoenix	movie:675
+Harry Potter and the Half-Blood Prince	movie:767
+Harry Potter and the Deathly Hallows: Part 1	movie:12444
+Harry Potter and the Deathly Hallows: Part 2	movie:12445
+# Already in Taste.java's seen lists:
+Chernobyl	tv:87108
+The Big Bang Theory	tv:1418
+Severance	tv:95396
+Family Guy	tv:1434
+The Dark Knight	movie:155
+Batman Begins	movie:272
+The Dark Knight Rises	movie:49026
+The Shawshank Redemption	movie:278
+Interstellar	movie:157336
+Oppenheimer	movie:872585
+Project Hail Mary	movie:687163
+The Dictator	movie:76493
+Senna (2010)	skip
+# Prime: someone else on the account watched these (2026-10-24):
+Waiting Hai	skip
+Moral Stories	skip
+FROM	skip
+Matka King	skip
+Maxton Hall - The World Between Us	skip
+Love O2O	skip
+I Know I Love You	skip
+Comicstaan	skip
+Amazon Funnies - 10 Minute Stand-ups	skip
+Dahaad	skip
+Immature	skip
+Rasbhari	skip
+Inside Edge	skip
+One Mic Stand	skip
+Second Case Of Seetharam	skip
+Your Fault: London	skip
+Ploey	skip
+Nishaanchi 2	skip
+Nishaanchi	skip
+Akshardham: Operation Vajra Shakti	skip
+Bhool Chuk Maaf	skip
+Housefull 5A	skip
+Odela 2	skip
+SUPERBOYS OF MALEGAON	skip
+Zakir Khan - Delulu Express	skip
+My Fault: London	skip
+Your Fault	skip
+Ka R Deva	skip
+Gat-Mat	skip
+Hoy Maharaja	skip
+Ekda Yevun Tar Bagha	skip
+Take Care Good Night	skip
+Gulaabi	skip
+PaniPuri	skip
+Like Aani Subscribe	skip
+Paani	skip
+Khatarnak	skip
+American Psycho	skip
+The Red Virgin	skip
+The Only Living Boy In New York	skip
+Lovelace	skip
+Basic Instinct	skip
+The Voyeurs	skip
+Chandu Champion	skip
+Maidaan	skip
+X	skip
+My Fault	skip
+American Beauty	skip
+Influencer	skip
+Saindhav	skip
+Juna Furniture	skip
+Agni	skip
+Kanguva	skip
+Shivrayancha Chhava	skip
+Ek Daav Bhootacha	skip
+# Prime: also someone else on the account : the Hindi and Marathi films watched 2021-24 (2026-10-24):
+Swaragandharva Sudhir Phadke	skip
+Mumbai Pune Mumbai 2	skip
+Double Seat	skip
+Mumbai Pune Mumbai	skip
+Phir Hera Pheri	skip
+Duniyadari	skip
+Hulchul	skip
+Bhagam Bhag	skip
+Anubhav Singh Bassi - Bas Kar Bassi	skip
+Gehraiyaan	skip
+Jalsa	skip
+Boyz 3	skip
+Improv All Stars - Games Night	skip
+Chandramukhi	skip
+Luckdown Be Positive	skip
+JHIMMA	skip
+Daagadi Chawl	skip
+Daagadi Chawl 2	skip
+YZ	skip
+Pune 52	skip
+Lipstick Under My Burkha	skip
+Choricha Mamla	skip
+Zakir Khan - Kaksha Gyarvi	skip
+Shamshera	skip
+Jayeshbhai Jordaar	skip
+JugJugg Jeeyo	skip
+Samrat Prithviraj	skip
+Runway 34	skip
+B.A. Pass	skip
+Heropanti 2	skip
+Sher Shivraj	skip
+Jaspreet Singh - Koi Load Nahi	skip
+Pawankhind	skip
+Bachchhan Paandey	skip
+Thappad	skip
+Toofaan	skip
+Veer-Zaara	skip
+Padmaavat	skip
+Shershaah	skip
+Wajah Tum Ho	skip
+Hate Story 4	skip
+Ab Bas	skip
+# Also watched (2026-10-24):
+About Time	movie:122906
+Weapons	movie:1078605
+Munjya	movie:1187058
+Hungama	movie:21184
+# Lookup fixes (2026-10-24):
+Emergency	movie:1000438
+Tribhanadhari Barbarik	movie:1534964
+Best of AIB	tv:69658
+# Watched, but not on TMDB:
+Takeshi's Castle India	skip
+# The 2016 Hindi film, per the owner:
+One Night Stand	movie:396389
+# Left unrated in taste/ratings.csv, so dropped (2026-10-25):
+Reporting Live	skip
+Kaappaan	skip
+Thaana Serndha Koottam	skip
+Marakkar Arab Sagar Ka Sher	skip
+Jai Bhim	skip
+Gharat Ganpati	skip
+Rahul Subramanian - Kal Main Udega	skip
+Wrong Turn - The Foundation	skip
+Goldfinger	skip
+Borat Subsequent Moviefilm	skip
+# Also watched (2026-10-25):
+1899	tv:90669
+# MCU films the owner rated (2026-10-25):
+Iron Man	movie:1726
+The Incredible Hulk	movie:1724
+Iron Man 2	movie:10138
+Thor	movie:10195
+Captain America: The First Avenger	movie:1771
+The Avengers	movie:24428
+Iron Man 3	movie:68721
+Thor: The Dark World	movie:76338
+Captain America: The Winter Soldier	movie:100402
+Guardians of the Galaxy	movie:118340
+Avengers: Age of Ultron	movie:99861
+Ant-Man	movie:102899
+Captain America: Civil War	movie:271110
+Doctor Strange	movie:284052
+Guardians of the Galaxy Vol. 2	movie:283995
+Spider-Man: Homecoming	movie:315635
+Thor: Ragnarok	movie:284053
+Black Panther	movie:284054
+Avengers: Infinity War	movie:299536
+Ant-Man and the Wasp	movie:363088
+Captain Marvel	movie:299537
+Avengers: Endgame	movie:299534
+Spider-Man: Far From Home	movie:429617
+Black Widow	movie:497698
+Shang-Chi and the Legend of the Ten Rings	movie:566525
+Eternals	movie:524434
+Spider-Man: No Way Home	movie:634649
+Doctor Strange in the Multiverse of Madness	movie:453395
+Thor: Love and Thunder	movie:616037
+Black Panther: Wakanda Forever	movie:505642
+Guardians of the Galaxy Vol. 3	movie:447365
+Spider-Man: Brand New Day	movie:969681

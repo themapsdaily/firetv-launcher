@@ -41,6 +41,8 @@ import android.view.accessibility.AccessibilityEvent;
  * Guard also hosts the sports score pill ({@link Scores}): it is always running, may draw over
  * other apps, and knows from these window events which app is in front. It also sees remote keys
  * first, so the pill can be closed over any app.
+ *
+ * Being always running, it also hosts the half-step volume control ({@link Volume}).
  */
 public final class Guard extends AccessibilityService {
     static final String AMAZON = "com.amazon.tv.launcher";
@@ -63,6 +65,7 @@ public final class Guard extends AccessibilityService {
     private final Runnable launch = () -> home(this);
     private View cover;
     private Scores scores;
+    private Volume volume;
     private long lastLaunch;
     private long buttonLaunch;
     private long selectAt;
@@ -125,6 +128,7 @@ public final class Guard extends AccessibilityService {
         cover = view;
         scores = new Scores(this);
         scores.start();
+        volume = new Volume(this);
     }
 
     @Override
@@ -132,6 +136,7 @@ public final class Guard extends AccessibilityService {
         handler.removeCallbacks(uncover);
         handler.removeCallbacks(launch);
         if (scores != null) scores.stop();
+        if (volume != null) volume.stop();
         if (cover != null) ((WindowManager) getSystemService(WINDOW_SERVICE)).removeView(cover);
         if (running == this) running = null;
         super.onDestroy();
@@ -143,6 +148,7 @@ public final class Guard extends AccessibilityService {
         CharSequence pkg = e.getPackageName(), cls = e.getClassName();
         if (pkg == null) return;
         if (scores != null) scores.foreground(pkg.toString(), cls == null ? "" : cls.toString());
+        if (volume != null) volume.foreground(pkg.toString());
         if (cls != null && APP_LAUNCH.contentEquals(cls)) {
             long now = SystemClock.uptimeMillis();
             buttonLaunch = now - selectAt < SELECT_MS ? 0 : now;

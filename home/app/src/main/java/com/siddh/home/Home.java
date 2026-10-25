@@ -208,7 +208,7 @@ public final class Home extends Activity {
     /**
      * Settings arrive as launch extras, e.g. from install.sh:
      * {@code am start -n com.siddh.home/.Home --es name Sid --es city Pune --es tmdb <key>}.
-     * The score pill's settings are described in {@link Scores}.
+     * The score pill's settings are described in {@link Scores}, the volume control's in {@link Volume}.
      */
     private void rememberConfig(Intent i) {
         if (i == null) return;
@@ -216,6 +216,13 @@ public final class Home extends Activity {
         if (i.hasExtra("scores")) sp.putBoolean("scores.off", !i.getBooleanExtra("scores", true));
         if (i.hasExtra("scores_hide")) sp.putString("scores.hide", i.getStringExtra("scores_hide"));
         if (i.hasExtra("f1_sessions")) sp.putString("f1.sessions", i.getStringExtra("f1_sessions"));
+        if (i.hasExtra("volume")) sp.putBoolean("volume.off", !i.getBooleanExtra("volume", true));
+        if (i.hasExtra("volume_half_db")) {
+            try {
+                sp.putFloat("volume.half_db", Math.abs(Float.parseFloat(i.getStringExtra("volume_half_db"))));
+            } catch (NumberFormatException | NullPointerException ignored) {
+            }
+        }
         sp.apply();
         String n = i.getStringExtra("name"), key = i.getStringExtra("tmdb"), city = i.getStringExtra("city");
         if (!TextUtils.isEmpty(n)) Apps.prefs(this).edit().putString("name", n.trim()).apply();

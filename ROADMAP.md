@@ -1,6 +1,6 @@
 # Roadmap
 
-Open items for the custom Fire TV UI (`home/`). Status key: **Open** (not started), **Spike** (feasibility unknown, test first). Feasibility notes are my reading, not tested on the stick yet.
+Open items for the custom Fire TV UI (`home/`). Status key: **Open** (not started), **Spike** (feasibility unknown, test first). Sections 4 to 7 are built and running on the stick (2026-10-24); their open tasks are listed in each. Elsewhere, feasibility notes are my reading, not tested on the stick yet.
 
 ## 1. Watch history across apps
 
@@ -21,7 +21,7 @@ Open items for the custom Fire TV UI (`home/`). Status key: **Open** (not starte
 - [ ] Write an importer for the Netflix viewing-activity CSV, so older history shows up too.
 - [ ] Optional: sync to Trakt so history lives outside the stick.
 
-## 2. Ads in Hotstar, Prime and FanCode
+## 2. Ads in Hotstar, Prime, FanCode, Airtel Xstream and SonyLIV
 
 **Goal:** fewer or no ads.
 
@@ -30,192 +30,159 @@ Open items for the custom Fire TV UI (`home/`). Status key: **Open** (not starte
 | Ad type | Can we remove it? |
 |---|---|
 | In-stream video ads (Hotstar, Prime ad tier, FanCode) | No. Paying for the ad-free tier is the only clean fix |
-| Banners, home-screen tiles, tracking calls | Mostly yes, with DNS blocking on the network |
-| "Skip ad" buttons | An accessibility service can press them, but it is flaky and has the same permission cost as above |
+| Banners, home-screen tiles, tracking calls | Mostly yes, with DNS blocking on the stick |
+| "Skip ad" buttons | An accessibility service can press them, but it is flaky and Guard would have to start reading screen content |
+
+**DNS blocking (2026-10-25):** personalDNSfilter already runs on the stick (dumbtv), but its list covers only Amazon's trackers. Opening each app's home screen (nothing played) and reading the filter's traffic log showed these unblocked hosts. Hotstar: `bifrost-api.hotstar.com` (its ad platform) and `app-measurement.com` (Firebase Analytics). FanCode: `vmax-ads.fancode.com` (its ad SDK), AppsFlyer, New Relic, Firebase logging and Crashlytics. Airtel Xstream: `adconfig.wynk.in` (its ad configuration), `events.airtel.tv` and Flurry. SonyLIV: `evt.sonyliv.com`, Google Analytics, CleverTap, AppsFlyer and Firebase. Prime Video's home made no ad calls; its ads are in the stream, and its telemetry is already in dumbtv's list. All are now in `debloat/ads.hosts`. `bash debloat/ads.sh` writes them into the filter's `additionalHosts.txt` as a marked block (`--undo` removes it, `--check` tests each host). The block is live since a reboot on 2026-10-25.
 
 **Tasks**
 - [ ] Check which tier each account is on and what the ad-free price would be.
-- [ ] Set up DNS-level blocking (Pi-hole or NextDNS) for the stick, and measure which ads disappear in each app.
-- [ ] **Spike:** an accessibility service that taps "Skip" where the app shows it. Keep only if it works across two app updates.
-- [ ] Extend `debloat/batch4-ads-tracking.pkgs` with anything found that is ad-related and safe to disable.
+- [x] DNS-level blocking for the stick: personalDNSfilter plus `debloat/ads.hosts` (2026-10-25).
+- [x] Rebooted and checked (2026-10-25): all hosts blocked. FanCode works and showed no ads.
+- [x] Airtel Xstream, SonyLIV and Prime Video added and rebooted (2026-10-25): all 16 hosts blocked, and all three apps open to their home screens.
+- [ ] Use Hotstar, YouTube, Airtel Xstream and SonyLIV normally with the list on, including playback. If one breaks, put `!` in front of its host or run `ads.sh --undo`.
+- [ ] Play a title in Hotstar and in Prime with the traffic log on, and add any ad host the home screens did not show. Prime made no ad lookups on its home screen.
+- [ ] **Spike:** tap "Skip" where the app shows it. Guard would need `canRetrieveWindowContent`, so it would read every app's screen. Keep it only if it works across two app updates.
+- [ ] Extend `debloat/batch4-ads-tracking.pkgs` with anything found that is ad-related and safe to disable. Nothing new found yet.
 
 ## 3. Custom volume control
 
-**Problem:** the monitor's own volume has steps 1 to 15. 11 is too quiet and 12 is too loud, with nothing in between.
+**Problem:** the volume has steps 1 to 15. 11 is too quiet and 12 is too loud, with nothing in between.
 
-**Reality:** the stick's volume buttons likely send steps to the monitor over HDMI, so the monitor decides the step size. I haven't confirmed that on this setup. If it holds, finer steps have to come from the stick's side.
+**Finding (2026-10-25):** the steps are the stick's own, not the monitor's. Audio goes over Bluetooth to a Mivi speaker, the stick's Bluetooth media volume sat at 11/15, and every volume press in `dumpsys audio` came from the remote through the stick's window manager.
+
+**Built (2026-10-25): half steps, `Volume.java` in Guard.** Each press of the remote's volume keys moves half a step. "11½" is the stick at 12 with a 1.5 dB cut on the whole output mix (a session-0 `DynamicsProcessing` effect, with an `Equalizer` fallback). On the TV the effect sits on the A2DP output thread. The level is remembered per app, and set again only within two steps of the current level, so a level kept on another output never blasts.
+- Android TV builds hand the volume keys to the window manager before any accessibility filter (AOSP `KeyboardInterceptor`), so Guard can't take them. Instead Fire OS makes its whole step, Volume hears the volume-changed broadcast, and it puts the stick back on the step the half level needs. That step is heard for a moment before the correction.
+- Fire OS's own volume bar shows whole steps (11½ shows as 12). It can't be hidden, and a pill of our own on top of it was one bar too many, so there is none.
+- A press up from 14 goes straight to 15, because Fire OS sends no broadcast once it is at 15.
+- Settings: `--ez volume false` turns it off; `--es volume_half_db 2` changes the cut.
 
 **Tasks**
-- [ ] **Spike:** find out who controls volume. Check whether the stick's volume changes the monitor's number, or whether the stick has its own 0-15 scale (`adb shell dumpsys audio`).
-  - 2026-10-23: the stick has its own 0-15 media scale per output. HDMI is at 15 (max), and audio was routed to Bluetooth (7/15) at the time of the check. HDMI-CEC is on, but `hdmi_control_volume_control_enabled` is unset. **Zero-code test:** set the monitor to 12 and lower the stick's HDMI media volume to 13 or 14. That gives levels between the monitor's 11 and 12.
-- [ ] **Spike:** try an audio effect (loudness enhancer or gain) that lowers or raises the stick's output by a fraction of a step. Check it works across apps and on Netflix and Prime, which may bypass it.
-- [ ] Choose the design: fix the monitor at 11 and add a software "11.5" gain, or fix it at 12 and add attenuation.
-- [ ] Build the control: an on-screen slider in Home, mapped to the remote's volume buttons if Fire OS allows intercepting them.
-- [ ] Remember the level per app.
+- [x] **Spike:** find out who controls volume (2026-10-23, 2026-10-25: the stick, over Bluetooth).
+- [x] **Spike:** an effect that cuts the output by a fraction of a step. `DynamicsProcessing` on session 0 attaches on Fire OS 7 (2026-10-25).
+- [x] Design: the stick one step up, with a cut for the half step.
+- [x] Build it, following the remote's volume keys (they can't be intercepted, see above).
+- [x] Remember the level per app.
+- [x] 1.5 dB sounds like half a step (owner, 2026-10-25).
+- [ ] Check the cut applies in Netflix, Prime, YouTube and Spotify (Netflix and Prime might bypass the mixer).
+- [ ] If the brief blip on each press is annoying, try a Home-side slider instead of the remote keys.
 
 ## 4. My teams: schedule and scores
 
-**Goal:** a "My sports" shelf in Home showing next fixture, live score and last result for what I follow, with no app launch needed.
+**Goal:** fixtures, live scores and results for what I follow, on the TV, with no app launch needed.
 
-**Following:** cricket (India national team, RCB in the IPL), F1 (Max Verstappen, Red Bull), WTA tennis (Elena Rybakina, Maja Chwalinska), and India at multi-sport games (Olympics, Asian Games, Commonwealth Games).
+**Following** (`Taste.java`): cricket (India, RCB in the IPL), F1, WTA tennis (Elena Rybakina, Maja Chwalinska), and India at multi-sport games (Olympics, Asian Games, Commonwealth Games).
 
-**Where the data comes from.** Limits below are from third-party pages and not checked against the providers' own docs, so confirm each before building on it.
+**Status (2026-10-24): built**, in `Sports.java`. It feeds the score pill (section 5), the F1 countdown (section 6) and the Sports view (section 7). Games mode is the main thing left.
 
-| Sport | Source | Use | Notes |
-|---|---|---|---|
-| F1 | [Jolpica](https://api.jolpi.ca/ergast/f1) | Calendar, session times, results, standings | Already in `Feed.java` (`fetchF1`). Reported limit of 500 requests an hour; cache past rounds because they never change |
-| Cricket | CricketData (CricAPI) free tier | India fixtures and live scores | About 100 calls a day on the free tier, so poll only on match days |
-| Cricket | An IPL-specific free API | RCB fixtures, scores, points table | Smaller services, unclear reliability. Pick one in the spike and keep a fallback |
-| Tennis (WTA) | ESPN scoreboard (unofficial): `site.api.espn.com/apis/site/v2/sports/tennis/wta/scoreboard`, optional `?dates=YYYYMMDD` | Live and day-by-day WTA matches | No key. Community-documented, not guaranteed, no published limits; its terms may forbid automated use. Set scores only, no point-by-point. Use the league name `wta`, not a number. First choice to test |
-| Tennis (WTA) | [Live Tennis API](https://livetennisapi.com) free key | Backup, and draws | Free tier reported at 30 requests a minute but 100 or 1,000 a day (sources disagree). Covers ATP, WTA, ITF |
-| Tennis (WTA) | Google sports results (via SerpApi or ScrapingBee) | Not recommended | Google has no official sports API. These are paid scrapers of Google's pages, so they cost money and can break |
+**Sources in use.** All keyless. ESPN's feeds are unofficial and community-documented, with no published limits, so they may change without notice.
 
-| Multi-sport games | Not chosen yet | India's events, results and medal tally | I found no free, stable API for these. Candidates to test: the Games' own results sites, Wikipedia or Wikidata for medal tables, and ESPN's unofficial feeds. A paid sports-data feed is the fallback |
+| Sport | Source | Notes |
+|---|---|---|
+| Cricket | ESPN cricket scorepanel, `site.api.espn.com/apis/site/v2/sports/cricket/scorepanel?dates=YYYYMMDD` | Returns about 25 matches ending on that date, so it is asked one day at a time for 6 days back and 21 ahead. Chosen over CricketData's free tier (about 100 calls a day) |
+| Tennis (WTA) | ESPN WTA scoreboard (`tennis/wta/scoreboard`) | Draws appear a day or two ahead, so it is asked for yesterday to two days ahead. Set scores only |
+| F1 | [Jolpica](https://api.jolpi.ca/ergast/f1) | Calendar with every session time, this and next season; last 4 race winners and the last podium |
 
-**Risks**
-- Multi-sport games happen only every two to four years and each has its own results site, so a general fetcher is not worth building. A small per-Games adapter, written when the Games are near, is more realistic.
-- Maja Chwalinska plays mostly lower-tier events, which free tennis feeds may not cover well. Test her name in each source before choosing one.
-- Free cricket tiers are small. The design has to stay inside them: fetch the fixture list once a day, and poll scores only while a followed team is playing.
-- All of these are unofficial or small services and can change or vanish. Keep the fetch code behind one interface per sport, so a source can be swapped without touching the UI.
-
-**Design**
-- One `Sports` class in `home/`, one small fetcher per sport, all returning the same record: sport, event, team or player, start time, status, score.
-- Store followed names in `Taste.java` next to the existing taste data.
-- Fetch the fixture lists once a day and cache them on the stick.
-- While a followed fixture is live, poll every minute or two and update the shelf.
-- Show times in IST.
+**How it works**
+- One record (`Sports.Fixture`) for every sport: event, stage, both sides, scores, venue, state, start time. One fetcher per sport, so a source can be swapped without touching the screens.
+- Fixtures and results are fetched once a day (retry after 30 minutes on failure) and cached in `files/sports.json`, so the screens work offline. Finished matches stay for 14 days at no extra cost.
+- Live scores are polled only from 10 minutes before a followed match until it ends: cricket every 45 seconds, tennis every 60.
+- F1 sessions get their state (upcoming, on, done) from the clock, as there is no free live feed.
+- Times are in IST.
 
 **Tasks**
-- [ ] **Spike, cricket:** try CricketData and one IPL-specific API. Check that they return India matches and RCB matches, how fresh the scores are, and what the call limit really is.
-- [ ] **Spike, tennis:** call ESPN's WTA scoreboard during a live tournament and check Rybakina and Chwalinska appear with live set scores; then check the Live Tennis API free key for the same. Choose the source that has both, or use two.
-- [ ] **Spike, F1:** confirm Jolpica's calendar gives start times for every session (practice, sprint, qualifying, race) and its results and standings give Max's position and points.
-- [ ] **Spike, multi-sport games:** for the next Games on the calendar, find where India's event schedule, results and medal tally can be fetched, and whether it can be filtered to India.
-- [ ] Add a Games mode to the shelf: India's medal tally plus its next events, shown only while a Games is on.
-- [ ] Define the shared fixture record and the `Sports` class.
-- [ ] Build the F1 fetcher first, reusing `fetchF1`, because the source is already working.
-- [ ] Build the cricket and tennis fetchers.
-- [ ] Add the "My sports" shelf with next fixture, live score and last result.
-- [ ] Add live polling that runs only while a followed fixture is on.
-- [ ] Optional: a reminder on the screensaver clock, such as "RCB in 30 min".
-- [ ] Optional: a button on a fixture that opens the right app (FanCode, Hotstar, Prime) to watch it.
+- [x] Pick sources: ESPN for cricket and tennis, Jolpica for F1.
+- [x] Shared fixture record and the `Sports` class.
+- [x] F1, cricket and tennis fetchers.
+- [x] Live polling that runs only while a followed match is on.
+- [x] Instead of a "My sports" shelf: the score pill (section 5) and the Sports view (section 7).
+- [ ] **Check RCB when the IPL starts.** The scorepanel has only shown internationals so far, so confirm IPL matches come through.
+- [ ] **Check Chwalinska.** She plays mostly lower-tier events; confirm ESPN lists her matches, or add a second tennis source.
+- [ ] **Check a sprint weekend** in Jolpica (sprint qualifying and sprint times).
+- [ ] **Spike, multi-sport games:** for the next Games, find where India's schedule, results and medal tally can be fetched and filtered to India. No free, stable API found yet; candidates are each Games' results site, Wikipedia or Wikidata, and ESPN.
+- [ ] Games mode: India's medal tally and next events, only while a Games is on.
+- [ ] Live F1 position (for example "Max P3, lap 21/57"). Jolpica has results only after a race; this needs a free live timing source, and none has been found yet.
+- [ ] Optional: a reminder on the screensaver, such as "RCB in 30 min".
+- [ ] Optional: open the right app (FanCode, Hotstar, Prime) from a fixture.
 
 ## 5. Live score overlay (top-left)
 
-**Goal:** a small score pill in the top-left corner, on the Home screen and on top of other apps such as YouTube, for the matches I follow that are live right now. Builds on section 4.
+**Goal:** a small score pill in the top-left corner, on Home and on top of other apps, for followed matches that are live.
+
+**Status (2026-10-24): built**, in `Scores.java`, running inside Guard. The expanded card and a test on the real remote are left.
 
 **Behaviour**
-- Compact pill: LIVE tag, team, score, overs or lap, opponent. Shows the first live match from my follows, and hides when nothing is live.
-- Over other apps: same pill, shorter. Fades to half strength after 5 seconds and comes back on a wicket, a goal, a lead change or a score change.
-- Expanded card: opened by a remote button. Lists every live followed match, then the next fixture.
-- Never takes remote focus, so YouTube controls keep working.
+- One short line after a dot in the sport's colour, in Barlow Condensed at 22 px: `NZ 123/5 (11.2) vs IND` (batting side first), `Rybakina 6-3 2-6 7-5 vs Shnaider`. Without a live match it shows the F1 countdown (section 6), else nothing.
+- Fades to half strength after 5 seconds; comes back when the score or state changes.
+- Never takes remote focus.
+- **Close it:** over another app, the menu button (three lines) hides it until Home is back in front. Over the app, menu reaches the app as usual once the pill is hidden.
+- Hidden on the Sports view, which shows it all already.
 
-**Routes.** The stick has no server, so a "route" here is one fetch function per sport that returns the same record (sport, event, side A, side B, score, status, last-change time). The URLs are placeholders until the section 4 spikes pick the sources.
-
-| Route | Returns | When it runs |
-|---|---|---|
-| `live/cricket` | Live India and RCB matches: score, overs, batters | Every 30 to 60 seconds while a followed match is on |
-| `countdown/f1` | Next F1 session name and start time, from the Jolpica calendar. No live polling; the countdown is computed on the stick | Calendar fetched once a day |
-| `live/tennis` | Live Rybakina and Chwalinska score, set by set | Every 30 seconds during a match |
-| `live/games` | India's current event and medal tally | Every minute while a Games is on |
-| `fixtures/today` | Today's followed fixtures with start times | Once a day, plus on boot |
-
-**Design**
-- A foreground service (not the Home activity) owns the polling and the overlay, because Home is not running while YouTube is on screen.
-- The overlay is a system window drawn over other apps. This needs the "display over other apps" permission. On Fire OS it may be grantable with `adb shell appops set com.siddh.home SYSTEM_ALERT_WINDOW allow`; I haven't confirmed that, so test it first.
-- Poll only inside a window around a followed fixture's start time, taken from `fixtures/today`. Outside it, do nothing, to stay within the free API limits.
-- Colours: dark translucent pill, white text, a red LIVE dot, a small round badge for each side in its team colour. Mockup is in the chat for this item.
+**How it works**
+- Guard, the accessibility service that replaces Amazon's home, hosts the pill as a `TYPE_ACCESSIBILITY_OVERLAY` window. That needs no "display over other apps" permission, is always running, and never takes focus.
+- Guard's window events say which app is in front (used for FanCode in section 6), and its key filter (`flagRequestFilterKeyEvents`) sees the menu button. Nothing on screen is read.
+- Settings, as Home launch extras: `--ez scores false` turns it off; `--es scores_hide <pkg,pkg>` keeps it off over those apps.
 
 **Tasks**
-- [ ] **Spike:** confirm a service can draw an overlay over YouTube on the stick, and whether the permission can be granted without a settings screen.
-- [ ] **Spike:** check the overlay does not steal remote focus or cover YouTube's own controls.
-- [ ] Build the shared record and `fixtures/today`.
-- [ ] Build `live/cricket` first, since India and RCB are the main follows.
-- [ ] Build the foreground service with the polling window.
-- [ ] Build the compact pill, then the expanded card.
-- [ ] Add the fade and the pop-back on score change.
-- [ ] Add `live/tennis` and `live/games`.
-- [ ] Add a setting to turn the overlay off per app.
+- [x] Overlay over other apps without a permission screen (accessibility overlay).
+- [x] Check it does not take remote focus.
+- [x] Today's fixtures and live cricket and tennis.
+- [x] Polling inside the match window, from Guard instead of a separate foreground service.
+- [x] Compact pill, with the fade and pop-back.
+- [x] Turn it off, or off per app.
+- [x] Close it with the menu button until back on Home (tested on the emulator).
+- [ ] **Test on the real remote:** during a live match, open Netflix and press menu.
+- [ ] Expanded card, opened by a remote button: every live followed match, then the next fixture.
+- [ ] Games line, once Games mode exists (section 4).
 
 ## 6. F1 session countdown
 
-**Replaces live F1 position.** Live F1 data is the least free of the sources, so instead of tracking the race, the TV tells me when a session is about to start and that it is on. This needs only the session start times from the Jolpica calendar, which Home already fetches.
+**Replaces live F1 position.** No free live F1 feed, so the TV says when a session is about to start and that it is on, from Jolpica's session times.
+
+**Status (2026-10-24): built**, in `Countdown.java` (11 unit tests) and shown by the pill.
 
 **Rules**
-- **Window:** from 30 minutes before a session (practice, sprint, qualifying, race) until it ends.
-- **30 to 10 minutes before:** a pill pops up every 5 minutes (at 30, 25, 20, 15), stays a few seconds, and fades. Text: "Qualifying in 28 min".
-- **10 minutes to zero:** the pill stays on screen the whole time, counting down in minutes and seconds: "Qualifying in 7:42".
-- **At zero:** the pill changes to "Qualifying underway" and stays for the session.
-- **Where:** top-left corner, with the F1 icon and red colour from section 7, on Home and on every app **except FanCode**.
-- **FanCode:** never shown while FanCode is in front, because FanCode already shows the session. If I leave FanCode while a session is underway, the "underway" pill appears.
-- **While I'm not in FanCode and a session is underway:** show "underway" in the corner. This covers watching YouTube or Netflix while the race is on.
-
-**Session length.** There is no free live feed to say when a session ends, so use a fixed length from the start time and stop the pill when it passes: practice 60 minutes, sprint qualifying 45, qualifying 60, sprint 40, race 2 hours 15. If a session is red-flagged and runs longer, the pill ends early. A tap-to-extend or a dismiss is the fallback.
-
-**Design**
-- A foreground service reads the calendar from the cache and updates once a second only inside the 10-minute window. Outside it, it wakes once a minute.
-- The service must know which app is in front. Two options to test: Android usage access (`PACKAGE_USAGE_STATS`, may be grantable with `adb shell appops set com.siddh.home GET_USAGE_STATS allow`) or an accessibility service. FanCode's package is `com.fancode.tv`.
-- Shares the overlay window from section 5 and respects the same "no remote focus" rule.
-- Times are shown in IST. Clock drift is not a concern because the countdown comes from the stick's clock; keep the calendar fresh in case a session is moved.
+- From 30 to 10 minutes before a session (practice, sprint qualifying, sprint, qualifying, race), the pill pops up for 8 seconds at 30, 25, 20 and 15 minutes: "Qualifying in 28 min".
+- From 10 minutes, it stays and counts down in minutes and seconds: "Qualifying in 7:42".
+- At the start it says the session is underway, for a fixed length: practice 60 minutes, sprint qualifying 45, qualifying 60, sprint 40, race 2 hours 15. A red-flagged session that runs longer ends early.
+- Never while FanCode (`com.fancode.tv`) is in front; leaving FanCode during a session shows "underway".
 
 **Tasks**
-- [ ] **Spike:** detect the foreground app on the stick and recognise FanCode.
-- [ ] **Spike:** check Jolpica lists every session time for a race weekend, including sprint weekends.
-- [ ] Build the countdown logic as a plain class with unit tests: given a session list and the time, return the state (hidden, brief pop, steady countdown, underway) and the text.
-- [ ] Wire it to the overlay pill in section 5.
-- [ ] Add the FanCode rule and the underway pill.
-- [ ] Add a setting to turn it off, and one to pick which sessions it covers (for example race and qualifying only).
+- [x] Detect the foreground app and recognise FanCode (Guard's window events).
+- [x] Countdown logic as a plain class with unit tests.
+- [x] Wired to the pill, with the FanCode rule and the underway state.
+- [x] Settings: `--ez scores false` turns it off with the pill; `--es f1_sessions Race,Qualifying` limits it to those sessions.
+- [ ] Check a sprint weekend's sessions (section 4).
 
 ## 7. Sports view (full screen)
 
-**Goal:** selecting the score pill opens a full-screen Sports view with everything I follow: live matches, upcoming fixtures and recent results. Mockup is in the chat for this item. Uses the same data and records as sections 4 and 5.
+**Goal:** a full-screen view of everything I follow: live matches, upcoming fixtures and recent results.
+
+**Status (2026-10-24): built**, in `Scoreboard.java`, after the owner's `sports-screen.html` design. Opened from the Sports tile in Home's status bar. Full match details and opening it over other apps are left.
 
 **Layout**
-- Two tabs: **Fixtures** (live matches first) and **Results**. Left and right move between tabs. No standings: not wanted (2026-10-24).
-- Three columns, one per sport: cricket (India, RCB), F1 (Verstappen, Red Bull), WTA (Rybakina, Chwalinska). Up and down move between matches.
-- Selecting a match opens its detail: full scorecard for cricket, session times and results for F1, set-by-set for tennis.
-- When a Games is on, a fourth column shows India's medal tally and events.
-- Back returns to where I was, whether Home or the app I left.
+- Two tabs: **Fixtures** (live matches first) and **Results**. No standings: not wanted (2026-10-24).
+- Three columns, one per sport: Cricket, Formula 1, WTA Tennis. Up and down move between cards and scroll the column; left and right move between sports. Cards near the bottom fade out.
+- Fixture card: tournament top-left, stage top-right, both sides with a code chip, day and time on the right, venue in the footer. The next match has an accent border; later cricket fixtures are one-line rows.
+- F1: this weekend's sessions with day and time, the next one marked, the race on a red tint; then the next rounds. Results show the winner and podium with gaps, then earlier winners.
+- Results: scores with overs for cricket, the result spelled out ("India won by 4 wickets, 1 ball left"); set boxes for tennis, with RET for a retirement.
+- Select opens a short detail panel (date, match, score, venue, status; or the F1 sessions or podium). Back closes it, then the view.
 
-**Look: stadium background and liquid glass.** The Sports view sits on a night-stadium scene: floodlight glow at the top corners, dark stands, and a mown-stripe green pitch rising from the bottom, with a dark vignette at the edges. Tabs, the date chip and the three sport columns are frosted glass panels over it: translucent white fill, a bright top edge, a soft inner shadow, and a drop shadow. The focused match card gets a stronger fill and a white ring. Static design preview: `design/sports-view.html` (open it in a browser).
+**Look.** Near-black, one accent per sport (cricket #4C9BFF, F1 #FF4D3D, tennis #C8F24A), Barlow Condensed for labels and numbers, Barlow for text (both OFL, in `assets/fonts`). A white ring marks focus. The earlier stadium background and glass panels were dropped for this design, which needs no blur and is light on the stick's GPU.
 
-Making it work on a Fire TV Stick 3rd gen (Fire OS 7, Android 9):
-- Real background blur (`RenderEffect`, `backdrop-filter`) needs Android 12 and is not available. Fake it: blur the stadium picture once at install time (a stack blur in Java), then draw the matching slice of the blurred picture behind each panel, with the white tint and edge highlight on top. It looks the same because the background never moves.
-- The stick's GPU is weak, so keep the background static: no animated floodlights or moving crowd. Pre-render it as one 1080p image.
-- Stadium image: render it ourselves (a vector or generated picture) to avoid licence problems. Do not use press photos.
-- Match the sport to the background when a match is opened: pitch for cricket, track and grandstand for F1, hard court for tennis.
-
-**Sport icons and colours.** Each sport gets its own icon in a coloured circle, used on the column header, on every match card and on the score pill, so a card is recognisable at a glance across the room.
-
-| Sport | Colour | Icon |
-|---|---|---|
-| Cricket | Blue | Cricket ball (drawn as a vector; common icon sets have no cricket icon) |
-| Formula 1 | Red | Steering wheel |
-| WTA tennis | Green | Tennis ball |
-| Multi-sport Games | Amber | Medal |
-| Sports view (Home button) | White | Trophy |
-
-- Draw all icons as vector drawables in `home/app/src/main/res/drawable/`, not emoji, because emoji look different on every device and Fire OS may not render them well.
-- Keep colour as a thin top bar on each column plus the icon circle. Do not tint whole cards.
-
-**How it opens.** On Home, selecting the pill opens it. Over another app the pill does not take focus (section 5), so a click can't reach it. Options, in order of preference, to test: a long-press of a remote button, a Home shortcut I set for it, or a "Sports" tile in Home itself.
-
-**Data needs beyond section 5**
-- Fixtures for the next 2 to 4 weeks, cached daily.
-- Results for the last 2 weeks, stored once a match ends, so they cost no more API calls.
+**Icons** (vector drawables): cricket ball, F1 flag, tennis ball, and a trophy for the Sports tile.
 
 **Tasks**
-- [ ] Add `fixtures/upcoming`, and `results/recent` routes to the shared record.
-- [ ] Add a small local store for fixtures and results, so the view opens at once and works with a poor connection.
-- [ ] Make the stadium background image and the pre-blurred copy, and build a glass panel view that draws its blurred slice.
-- [ ] **Spike:** time the glass panels on the stick; drop to a plain translucent fill if scrolling is not smooth.
-- [ ] Make per-sport detail backgrounds (cricket pitch, F1 circuit, tennis court).
-- [ ] Draw the five sport icons as vector drawables and apply them to the pill, column headers and match cards.
-- [ ] Build the Sports activity with the four tabs and three sport columns.
-- [ ] Build the match detail screens, cricket first.
-- [ ] Make the pill open the view on Home.
-- [ ] **Spike:** test the ways to open the view while another app is in front.
-- [ ] Add the Games column that appears only during a Games.
-- [ ] Add a setting to choose which sports and teams appear, and their order.
+- [x] Local store for fixtures and results, so the view opens at once and works offline.
+- [x] Sports activity with two tabs and three sport columns.
+- [x] Sport icons on the column headers.
+- [x] Open it from Home (the status bar's Sports tile; the pill never takes focus).
+- [x] Basic match detail panel.
+- [ ] Full cricket scorecard in the detail (batting and bowling).
+- [ ] IPL points table during the season, if wanted.
+- [ ] **Spike:** open the view while another app is in front: a long-press of a remote button, or the expanded card's button (section 5).
+- [ ] Games column, only during a Games.
+- [ ] On-TV setting for which sports and teams appear, and their order (today they are in `Taste.java`).
 
 ## 8. Known gaps
 
@@ -223,10 +190,11 @@ Smaller items, roughly in priority order.
 
 ### Performance (the 1 GB stick lags)
 
-- [ ] **Shrink the launcher's memory.** It uses about 105 MB PSS, half of that graphics. Decode backdrops at the screen's real size, keep at most the current and next slide in memory, and drop logos you can't see. Aim for under 70 MB.
-- [ ] **React to `onTrimMemory`.** On `TRIM_MEMORY_RUNNING_LOW` or worse, release the gallery's bitmaps and stop the shelf clip, and reload them when focus returns.
-- [ ] **Lighter animations on low memory.** Turn off dock magnification and the screensaver's depth effect when `ActivityManager.isLowRamDevice()` is true or available RAM is under 250 MB.
-- [ ] **Idle Spotify keeps about 130 MB.** Its foreground service survives `killBackgroundProcesses`. Add `install.sh --tidy`, which force-stops non-playing media apps over ADB.
+- [x] **Release pictures in the background.** Home drops the gallery's pictures in `onStop` and on `TRIM_MEMORY_UI_HIDDEN`, and reloads them on return. Measured on the stick (2026-10-24): 73 to 67 MB PSS on Home, 83 to 76 MB with another app in front.
+- [ ] **Shrink the launcher's memory further.** About 30 MB of graphics stays while another app is in front: Guard's overlay windows (the score pill) live in the same process, so Android never sees it as hidden and never trims its GPU caches. Fix: run Guard and the pill in their own process (`android:process`). Needs care, because Guard and Home share static state (`Guard.shown()`, `Home.lastTint`, the `Sports` cache).
+- [ ] **Lighter animations on low memory.** Turn off dock magnification when `ActivityManager.isLowRamDevice()` is true or available RAM is under 250 MB. (The screensaver's depth effect was removed on 2026-10-24.)
+- [ ] **Idle Spotify keeps 40 to 50 MB.** Its player service stays in the foreground after the music stops, so `killBackgroundProcesses` can't touch it. Tried 2026-10-24: a Stop media key sent to its `RemoteControlReceiver` reaches it, but the service stays; an app can't force-stop another. Left: `install.sh --tidy`, which force-stops non-playing media apps over ADB.
+- [ ] **Lag while installing apps.** With about 60 MB free at idle and 176 MB swapped, an Appstore download and install makes the whole stick lag. The items above are the parts we control.
 - [ ] **`com.amazon.tv.livetv` idles at about 50 MB.** Check whether HDMI/input needs it. If not, add it to a debloat batch 9.
 
 ### Features
@@ -234,7 +202,7 @@ Smaller items, roughly in priority order.
 - [ ] **Open shelf items.** Selecting a slide should open it in its app: Spotify URIs, and Netflix, Prime or JioHotstar title deep links where TMDB has an ID.
 - [ ] **Refresh the Spotify shelf automatically.** `Taste.MUSIC` is a fixed list today. Add a small script that regenerates it from the Spotify Web API (top items, short and medium term) before `install.sh`.
 - [ ] **On-TV settings.** Set name, city and hidden apps from a settings panel instead of `am start` extras.
-- [ ] **Test the Amazon Music button.** The remote's Amazon Music button should open Spotify through Guard, but nobody has pressed it on a real remote yet.
+- [ ] **Test the Amazon Music button.** The remote's Amazon Music button should open Spotify through Guard, but nobody has pressed it on a real remote yet. Since 2026-10-24 Guard skips the switch when the store page followed a select press, because opening any app's store page (for example Airtel Xstream's) also goes through AppLaunchActivity and opened Spotify by mistake. Also check that opening a store page no longer does that.
 - [ ] **More taste.** Extend `Taste.java` as more shows come up. Maybe let the watch history from section 1 feed it.
 
 ### Project
@@ -244,12 +212,13 @@ Smaller items, roughly in priority order.
 - [ ] **Fix the deprecation warning** in `Home.java` (`-Xlint:deprecation`).
 - [ ] **Standalone debloat.** `debloat/fire.py` needs a cleanyourtv clone. Vendor its ADB client (with its license) or pin a commit.
 - [ ] **Screenshots in the README.** Show the dock, the Spotify shelf and the screensaver.
+- [x] **Local testing.** `home/emulator.sh` runs an Android 9 TV emulator at 1080p and installs Home on it, so changes are checked before they reach the stick. It has no Amazon home, FanCode or Spotify, so those parts are checked on the stick. Note: `adb shell input` keys skip accessibility key filters; send keys with `adb emu event send` to test Guard's.
+- [ ] **Fixed address for the stick.** It moved from 192.168.1.5 to 192.168.1.3 by DHCP (2026-10-24). Reserve an address for it in the router, or have `install.sh` find it.
 - [ ] **Switch ADB off after a deploy.** Add `install.sh --adb-off`, which turns wireless debugging off when you're done.
 
 ## 9. Other ideas to rank later
 
 - [ ] Per-profile home screen (different shelves for each person).
-- [ ] Sports shelf: live and upcoming F1 and cricket fixtures, beyond the FanCode artwork.
 - [ ] Sleep timer that dims the screen, lowers volume and then turns the stick off.
 - [ ] Backup and restore of Home settings and shelf order.
 - [ ] Faster boot to Home (measure first).

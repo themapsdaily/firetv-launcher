@@ -1,0 +1,29 @@
+# Ad and tracking hosts for the streaming apps, on top of dumbtv's Amazon list (ROADMAP section 2).
+# Applied by debloat/ads.sh into personalDNSfilter's additionalHosts.txt. A host also blocks its
+# subdomains. Found 2026-10-25 by opening each app's home screen (nothing played) and reading
+# the filter's traffic log: Hotstar, FanCode, Airtel Xstream, SonyLIV and Prime Video. Prime's home
+# made no ad calls (its ads are in the stream), and its Amazon telemetry is in dumbtv's list.
+#
+# In-stream video ads in Hotstar, Prime and FanCode come inside the video stream itself, so no
+# host here removes them. These stop the trackers and the separately fetched ad calls.
+
+# Trackers: analytics and crash reporting. Apps carry on without them.
+app-measurement.com                  # Firebase Analytics (Hotstar)
+appsflyersdk.com                     # AppsFlyer install attribution (FanCode)
+mobile-collector.newrelic.com        # New Relic app monitoring (FanCode)
+firebaselogging-pa.googleapis.com    # Firebase event logging (FanCode)
+firebase-settings.crashlytics.com    # Crashlytics settings (FanCode, Hotstar, SonyLIV)
+data.flurry.com                      # Flurry analytics (Airtel Xstream)
+www.google-analytics.com             # Google Analytics (SonyLIV)
+clevertap-prod.com                   # CleverTap engagement tracking (SonyLIV)
+conviva.com                          # Conviva video analytics (seen in the log, app unknown)
+
+# Ad calls: test each app after applying. If one breaks, move its line to the end with "!"
+# (allow) in front, or run ads.sh --undo.
+vmax-ads.fancode.com                 # FanCode's ad SDK (VMAX)
+bifrost-api.hotstar.com              # Hotstar's ad platform: ad decisions and impression tracking
+googleads.g.doubleclick.net          # Google ads (YouTube, IMA SDK in other apps)
+static.doubleclick.net
+adconfig.wynk.in                     # Airtel Xstream's ad configuration
+events.airtel.tv                     # Airtel Xstream's own event tracking
+evt.sonyliv.com                      # SonyLIV's own event tracking

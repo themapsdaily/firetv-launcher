@@ -1,6 +1,7 @@
 package com.siddh.home;
 
 import android.app.ActivityManager;
+import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.media.AudioManager;
 import android.util.Log;
@@ -37,6 +38,22 @@ final class Tidy {
         if (ext != null) empty(ext);
         am.getMemoryInfo(mi);
         Log.i(TAG, "tidied, " + (mi.availMem >> 20) + " MB free");
+    }
+
+    /**
+     * Frees the GPU caches Home's screen leaves behind (textures, render targets: about 15 MB on
+     * the stick). Android does this itself with TRIM_MEMORY_UI_HIDDEN, but Guard's accessibility
+     * binding keeps this process counted as in use, so that call never comes. This is the same
+     * call, through the hidden WindowManagerGlobal.trimMemory; caches refill when Home draws again.
+     */
+    static void gpu() {
+        try {
+            Class<?> wmg = Class.forName("android.view.WindowManagerGlobal");
+            Object g = wmg.getMethod("getInstance").invoke(null);
+            wmg.getMethod("trimMemory", int.class).invoke(g, ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            Log.w(TAG, "gpu trim unavailable: " + e);
+        }
     }
 
     private static void empty(File d) {

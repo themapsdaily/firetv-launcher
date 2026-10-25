@@ -181,6 +181,8 @@ public final class Home extends Activity {
     protected void onStop() {
         super.onStop();
         gallery.clear();
+        // After the last frame has gone, so nothing refills the caches straight away.
+        getWindow().getDecorView().postDelayed(Tidy::gpu, 1000);
     }
 
     @Override
